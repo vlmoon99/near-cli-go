@@ -1,6 +1,6 @@
 $Repo = "vlmoon99/near-cli-go"
 $LatestUrl = "https://api.github.com/repos/$Repo/releases/latest"
-$InstallDir = "$env:ProgramFiles\NearCLI"
+$InstallDir = "$env:USERPROFILE\bin"  # Install to the user's home directory
 $BinaryName = "near-go.exe"
 
 Write-Host "🔍 Detecting system architecture..."
@@ -33,10 +33,10 @@ if (!(Test-Path $InstallDir)) {
 Move-Item -Force -Path $DownloadPath -Destination "$InstallDir\$BinaryName"
 
 # Add to system PATH
-$CurrentPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+$CurrentPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::User)  # Use User's PATH instead
 if ($CurrentPath -notlike "*$InstallDir*") {
-    [System.Environment]::SetEnvironmentVariable("Path", "$CurrentPath;$InstallDir", [System.EnvironmentVariableTarget]::Machine)
-    Write-Host "🔄 System PATH updated. Please restart your terminal."
+    [System.Environment]::SetEnvironmentVariable("Path", "$CurrentPath;$InstallDir", [System.EnvironmentVariableTarget]::User)  # Update only user's PATH
+    Write-Host "🔄 User PATH updated. Please restart your terminal."
 }
 
 Write-Host "✅ Installation complete! Run '$BinaryName' to start using it."

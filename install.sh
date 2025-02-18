@@ -4,7 +4,7 @@ set -e
 
 REPO="vlmoon99/near-cli-go"
 LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/bin" 
 BINARY_NAME="near-go"
 
 echo "🔍 Detecting OS..."
@@ -41,6 +41,7 @@ curl -L -o "$FILENAME" "$URL"
 
 echo "🔧 Installing..."
 chmod +x "$FILENAME"
-sudo mv "$FILENAME" "$INSTALL_DIR/$BINARY_NAME"
+mkdir -p "$INSTALL_DIR"  # Ensure the install directory exists
+mv "$FILENAME" "$INSTALL_DIR/$BINARY_NAME"
 
-echo "✅ Installation complete! Run '$BINARY_NAME' to start using it."
+echo "✅ Installation complete! Run '$INSTALL_DIR/$BINARY_NAME' to start using it."
