@@ -5,7 +5,7 @@ set -e
 REPO="vlmoon99/near-cli-go"
 LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="near-cli"
+BINARY_NAME="near-go"
 
 echo "🔍 Detecting OS..."
 OS=$(uname -s)

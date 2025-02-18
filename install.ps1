@@ -1,7 +1,7 @@
 $Repo = "vlmoon99/near-cli-go"
 $LatestUrl = "https://api.github.com/repos/$Repo/releases/latest"
 $InstallDir = "$env:ProgramFiles\NearCLI"
-$BinaryName = "near-cli.exe"
+$BinaryName = "near-go.exe"
 
 Write-Host "🔍 Detecting system architecture..."
 $Arch = (Get-WmiObject Win32_Processor).Architecture
