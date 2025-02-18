@@ -97,16 +97,18 @@ func createProject() {
 	runCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.5")
 
 	fmt.Println("Creating main.go file...")
-	code := `package main
+	code :=
+		`package main
 
-import (
-	"github.com/vlmoon99/near-sdk-go/env"
-)
+	import (
+		"github.com/vlmoon99/near-sdk-go/env"
+	)
 
-//go:export InitContract
-func InitContract() {
-	env.LogString("Init Smart Contract")
-}`
+	//go:export InitContract
+	func InitContract() {
+		env.LogString("Init Smart Contract")
+	}`
+
 	writeToFile("main.go", code)
 
 	fmt.Println("Smart contract project created successfully!")
