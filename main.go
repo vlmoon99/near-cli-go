@@ -18,6 +18,8 @@ var commands = map[string]CommandHandler{
 	"deploy":                 handleDeploy,
 	"create-dev-account":     handleCreateDevAccount,
 	"import-mainnet-account": handleImportMainnetAccount,
+	"test-package":           handleTestPackage,
+	"test-project":           handleTestProject,
 }
 
 var (
@@ -58,6 +60,8 @@ func printUsage() {
 	fmt.Println("  cli deploy [--prod]")
 	fmt.Println("  cli create-dev-account")
 	fmt.Println("  cli import-mainnet-account")
+	fmt.Println("  cli test-package")
+	fmt.Println("  cli test-project")
 }
 
 // ---------------- CREATE COMMAND ---------------- //
@@ -95,7 +99,7 @@ func createProject() {
 	runCommand("go", "mod", "init", moduleName)
 
 	fmt.Println("Installing dependencies...")
-	runCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.5")
+	runCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.8")
 
 	fmt.Println("Creating main.go file...")
 	code :=
@@ -159,13 +163,18 @@ func handleDeploy(args []string) {
 	fmt.Println("Deploying contract...")
 	deployCmd := []string{
 		"contract", "deploy", smartContractID, "use-file", "./main.wasm",
-		"with-init-call", "InitContract", "json-args", "{}",
-		"prepaid-gas", "100.0 Tgas", "attached-deposit", "0 NEAR",
-		"network-config", network, "sign-with-legacy-keychain", "send",
+		"without-init-call",
+		"network-config", network,
+		"sign-with-legacy-keychain",
+		"send",
 	}
-	runCommand("near", deployCmd...)
+	output, err := runCommand("near", deployCmd...)
+	if err != nil {
+		log.Fatalf("Error deploying contract: %v\n%s", err, string(output))
+	}
 
 	fmt.Println("Deployment complete!")
+	fmt.Printf("Deploy command output:\n%s\n", string(output))
 }
 
 // ---------------- CREATE DEV ACCOUNT ---------------- //
@@ -200,18 +209,65 @@ func handleImportMainnetAccount(args []string) {
 	scanner.Scan()
 	seedPhrase := strings.TrimSpace(scanner.Text())
 
+	fmt.Print("Enter your account ID: ")
+	scanner.Scan()
+	accountID := strings.TrimSpace(scanner.Text())
+
 	fmt.Println("Importing mainnet account...")
 	importCmd := []string{
 		"account", "import-account", "using-seed-phrase", seedPhrase,
 		"--seed-phrase-hd-path", "m/44'/397'/0'",
 		"network-config", "mainnet",
+		accountID,
 	}
 	runCommand("near", importCmd...)
 
 	fmt.Println("Mainnet account imported successfully!")
 }
 
+// ---------------- TEST COMMANDS ---------------- //
+
+func handleTestPackage(args []string) {
+	fmt.Println("Running unit tests for the package...")
+
+	if err := testSmartContract("tinygo", "test", "./"); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Package tests complete!")
+}
+
+func handleTestProject(args []string) {
+	fmt.Println("Running unit tests for the project...")
+
+	if err := testSmartContract("tinygo", "test", "./..."); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Project tests complete!")
+}
+
 // ---------------- UTILITY FUNCTIONS ---------------- //
+
+func testSmartContract(name string, args ...string) error {
+	var stderr bytes.Buffer
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil && strings.Contains(stderr.String(), "error") {
+		fmt.Println("Retrying tests due to error...")
+		cmd = exec.Command(name, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("test failed after retry: %v", err)
+		}
+	}
+
+	fmt.Printf("Output: %v\n", stderr.String())
+	return nil
+}
 
 func buildSmartContract() error {
 	buildCmd := []string{
@@ -221,7 +277,7 @@ func buildSmartContract() error {
 
 	output, err := runCommand("tinygo", buildCmd...)
 	if err != nil && strings.Contains(string(output), "unsupported parameter type") {
-		fmt.Println("Retrying build due to unsupported parameter type error...")
+		// fmt.Println("Retrying build due to unsupported parameter type error...")
 		output, err = runCommand("tinygo", buildCmd...)
 		if err != nil {
 			return fmt.Errorf("build failed after retry: %v", err)
@@ -232,14 +288,16 @@ func buildSmartContract() error {
 }
 
 func runCommand(name string, args ...string) ([]byte, error) {
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
 	if err := cmd.Run(); err != nil {
-		return stderr.Bytes(), err
+		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
-	return nil, nil
+
+	return stdout.Bytes(), nil
 }
 
 func writeToFile(filename, content string) {
