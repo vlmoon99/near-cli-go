@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -117,21 +118,15 @@ func createProject() {
 // ---------------- BUILD COMMAND ---------------- //
 
 func handleBuild(args []string) {
-
-	// Check if main.go exists
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
 		log.Fatal("Error: Cannot compile. main.go is missing.")
 	}
 
 	fmt.Println("Building smart contract...")
 
-	// Build command for TinyGo
-	buildCmd := []string{
-		"build", "-size", "short", "-no-debug", "-panic=trap",
-		"-scheduler=none", "-gc=leaking", "-o", "main.wasm", "-target", "wasm-unknown", "./",
+	if err := buildSmartContract(); err != nil {
+		log.Fatal(err)
 	}
-
-	runCommand("tinygo", buildCmd...)
 
 	fmt.Println("Build complete! Generated main.wasm")
 }
@@ -148,11 +143,10 @@ func handleDeploy(args []string) {
 	smartContractID = strings.TrimSpace(scanner.Text())
 
 	fmt.Println("Building for deployment...")
-	buildCmd := []string{
-		"build", "-size", "short", "-no-debug", "-panic=trap",
-		"-scheduler=none", "-gc=leaking", "-o", "main.wasm", "-target", "wasm-unknown", "./",
+
+	if err := buildSmartContract(); err != nil {
+		log.Fatal(err)
 	}
-	runCommand("tinygo", buildCmd...)
 
 	fmt.Println("Verifying build...")
 	runCommand("ls", "-lh", "main.wasm")
@@ -179,12 +173,10 @@ func handleDeploy(args []string) {
 func handleCreateDevAccount(args []string) {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// Prompt the user for the account ID
 	fmt.Print("Enter your desired account ID (without the .testnet postfix): ")
 	scanner.Scan()
 	accountID := strings.TrimSpace(scanner.Text())
 
-	// Append the .testnet postfix to the account ID
 	accountID = accountID + ".testnet"
 
 	fmt.Println("Creating developer account...")
@@ -194,7 +186,6 @@ func handleCreateDevAccount(args []string) {
 		"autogenerate-new-keypair", "save-to-legacy-keychain", "network-config", "testnet", "create",
 	}
 
-	// Run the command
 	runCommand("near", createCmd...)
 
 	fmt.Println("Developer account created successfully!")
@@ -222,13 +213,33 @@ func handleImportMainnetAccount(args []string) {
 
 // ---------------- UTILITY FUNCTIONS ---------------- //
 
-func runCommand(name string, args ...string) {
+func buildSmartContract() error {
+	buildCmd := []string{
+		"build", "-size", "short", "-no-debug", "-panic=trap",
+		"-scheduler=none", "-gc=leaking", "-o", "main.wasm", "-target", "wasm-unknown", "./",
+	}
+
+	output, err := runCommand("tinygo", buildCmd...)
+	if err != nil && strings.Contains(string(output), "unsupported parameter type") {
+		fmt.Println("Retrying build due to unsupported parameter type error...")
+		output, err = runCommand("tinygo", buildCmd...)
+		if err != nil {
+			return fmt.Errorf("build failed after retry: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func runCommand(name string, args ...string) ([]byte, error) {
+	var stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("Error running command: %s %v\n%v", name, args, err)
+		return stderr.Bytes(), err
 	}
+	return nil, nil
 }
 
 func writeToFile(filename, content string) {
