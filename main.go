@@ -13,13 +13,13 @@ import (
 type CommandHandler func(args []string)
 
 var commands = map[string]CommandHandler{
-	"create":                 handleCreate,
-	"build":                  handleBuild,
-	"deploy":                 handleDeploy,
-	"create-dev-account":     handleCreateDevAccount,
-	"import-mainnet-account": handleImportMainnetAccount,
-	"test-package":           handleTestPackage,
-	"test-project":           handleTestProject,
+	"create":             handleCreate,
+	"build":              handleBuild,
+	"deploy":             handleDeploy,
+	"create-dev-account": handleCreateDevAccount,
+	// "import-mainnet-account": handleImportMainnetAccount,
+	"test-package": handleTestPackage,
+	"test-project": handleTestProject,
 }
 
 var (
@@ -59,7 +59,7 @@ func printUsage() {
 	fmt.Println("  cli build")
 	fmt.Println("  cli deploy [--prod]")
 	fmt.Println("  cli create-dev-account")
-	fmt.Println("  cli import-mainnet-account")
+	// fmt.Println("  cli import-mainnet-account")
 	fmt.Println("  cli test-package")
 	fmt.Println("  cli test-project")
 }
@@ -174,7 +174,7 @@ func handleDeploy(args []string) {
 	}
 
 	fmt.Println("Deployment complete!")
-	fmt.Printf("Deploy command output:\n%s\n", string(output))
+	fmt.Printf("Deploy command output: %v", string(output))
 }
 
 // ---------------- CREATE DEV ACCOUNT ---------------- //
@@ -200,30 +200,30 @@ func handleCreateDevAccount(args []string) {
 	fmt.Println("Developer account created successfully!")
 }
 
-// ---------------- IMPORT MAINNET ACCOUNT ---------------- //
+// // ---------------- IMPORT MAINNET ACCOUNT ---------------- //
 
-func handleImportMainnetAccount(args []string) {
-	scanner := bufio.NewScanner(os.Stdin)
+// func handleImportMainnetAccount(args []string) {
+// 	scanner := bufio.NewScanner(os.Stdin)
 
-	fmt.Print("Enter your seed phrase (12 words): ")
-	scanner.Scan()
-	seedPhrase := strings.TrimSpace(scanner.Text())
+// 	fmt.Print("Enter your seed phrase (12 words): ")
+// 	scanner.Scan()
+// 	seedPhrase := strings.TrimSpace(scanner.Text())
 
-	fmt.Print("Enter your account ID: ")
-	scanner.Scan()
-	accountID := strings.TrimSpace(scanner.Text())
+// 	fmt.Print("Enter your account ID: ")
+// 	scanner.Scan()
+// 	accountID := strings.TrimSpace(scanner.Text())
 
-	fmt.Println("Importing mainnet account...")
-	importCmd := []string{
-		"account", "import-account", "using-seed-phrase", seedPhrase,
-		"--seed-phrase-hd-path", "m/44'/397'/0'",
-		"network-config", "mainnet",
-		accountID,
-	}
-	runCommand("near", importCmd...)
+// 	fmt.Println("Importing mainnet account...")
+// 	importCmd := []string{
+// 		"account", "import-account", "using-seed-phrase", seedPhrase,
+// 		"--seed-phrase-hd-path", "m/44'/397'/0'",
+// 		"network-config", "mainnet",
+// 		accountID,
+// 	}
+// 	runCommand("near", importCmd...)
 
-	fmt.Println("Mainnet account imported successfully!")
-}
+// 	fmt.Println("Mainnet account imported successfully!")
+// }
 
 // ---------------- TEST COMMANDS ---------------- //
 
@@ -256,7 +256,6 @@ func testSmartContract(name string, args ...string) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil && strings.Contains(stderr.String(), "error") {
-		fmt.Println("Retrying tests due to error...")
 		cmd = exec.Command(name, args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = &stderr
@@ -277,12 +276,16 @@ func buildSmartContract() error {
 
 	output, err := runCommand("tinygo", buildCmd...)
 	if err != nil && strings.Contains(string(output), "unsupported parameter type") {
-		// fmt.Println("Retrying build due to unsupported parameter type error...")
 		output, err = runCommand("tinygo", buildCmd...)
 		if err != nil {
 			return fmt.Errorf("build failed after retry: %v", err)
 		}
+
+		fmt.Printf("Build Output : %v", string(output))
+
 	}
+
+	fmt.Printf("Build Output : %v", string(output))
 
 	return nil
 }
