@@ -14,14 +14,12 @@ Once these tools are installed, you can proceed with the installation of the `ne
 This is a simple CLI tool to manage NEAR smart contract projects. It provides functionality to create, build, deploy, and manage developer accounts on the NEAR network. The tool is compatible with Linux, macOS, and Windows.
 
 ## Installation
-
-Absolutely! Let's make it clear and prominent to ensure users see it:
-
 ```bash
 curl -LO https://github.com/vlmoon99/near-cli-go/releases/latest/download/install.sh && bash install.sh
 ```
-
 This script will download the necessary binary and install it into your local `~/bin` directory. It will also update your `PATH` to ensure the `near-go` binary is accessible globally.
+
+You can also donwload raw bin from the [Gtihub Releases](https://github.com/vlmoon99/near-cli-go/releases/tag/v1.0.0) and move it into your bin directory.
 
 ## Usage
 
@@ -61,14 +59,21 @@ Once the CLI is installed, you can use the following commands:
 
    This creates a developer account on the NEAR testnet. You will need to provide an account ID when prompted.
 
-5. **Import a mainnet account:**
+5. **Test the smart contract package:**
 
    ```bash
-   near-go import-mainnet-account
+   near-go test-package
    ```
 
-   This allows you to import an existing NEAR account on the mainnet using a seed phrase.
+   This wraps the TinyGo test command to run tests on the smart contract package.
 
+6. **Test the smart contract project:**
+
+   ```bash
+   near-go test-project
+   ```
+
+   This wraps the TinyGo test command to run tests on the entire smart contract project.
 
 ## Example Workflow
 
@@ -98,15 +103,23 @@ Once the CLI is installed, you can use the following commands:
    near-go deploy
    ```
 
-5. **Import your mainnet account (before deploying to production):**
+5. **Test the smart contract package:**
 
    ```bash
-   near-go import-mainnet-account
+   near-go test-package
    ```
 
-   This will import your mainnet account for deploying to the production environment. Make sure to have your mainnet credentials available for this step.
+   This runs tests on the smart contract package using the TinyGo test command.
 
-6. **Deploy the smart contract to mainnet (optional):**
+6. **Test the smart contract project:**
+
+   ```bash
+   near-go test-project
+   ```
+
+   This runs tests on the entire smart contract project using the TinyGo test command.
+
+7. **Deploy the smart contract to mainnet (optional):**
 
    ```bash
    near-go deploy --prod

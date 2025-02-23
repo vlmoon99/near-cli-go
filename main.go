@@ -59,9 +59,9 @@ func printUsage() {
 	fmt.Println("  cli build")
 	fmt.Println("  cli deploy [--prod]")
 	fmt.Println("  cli create-dev-account")
-	// fmt.Println("  cli import-mainnet-account")
 	fmt.Println("  cli test-package")
 	fmt.Println("  cli test-project")
+	// fmt.Println("  cli import-mainnet-account")
 }
 
 // ---------------- CREATE COMMAND ---------------- //
