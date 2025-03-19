@@ -24,6 +24,28 @@ func NearCLIWrapper(args ...string) error {
 	return nil
 }
 
+func RunWithRetry(command string, args []string, entityType string) {
+	fmt.Printf("Running tests for the %s...\n", entityType)
+
+	cmd := exec.Command(command, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("First %s test attempt failed: %s\n", entityType, string(output))
+
+		fmt.Printf("Retrying %s tests...\n", entityType)
+		output, err = cmd.CombinedOutput()
+		fmt.Println(string(output))
+
+		if err != nil {
+			fmt.Printf("Second %s test attempt failed: %s\n", entityType, string(output))
+			return
+		}
+	}
+
+	fmt.Println(string(output))
+	fmt.Printf("%s tests completed successfully!\n", entityType)
+}
+
 func RunCommand(name string, args ...string) ([]byte, error) {
 	fmt.Printf("Running command: %s %v\n", name, args) // Log the command being executed
 
@@ -68,7 +90,7 @@ func WriteToFile(filename, content string) {
 
 // Project
 
-func CreateProject(projectName, moduleName string) {
+func HandleCreateProject(projectName, moduleName string) {
 	fmt.Println("Creating project directory...")
 	if err := os.Mkdir(projectName, os.ModePerm); err != nil {
 		log.Fatal(err)
@@ -120,34 +142,59 @@ func CreateSmartContractProject(moduleName string) {
 // Project
 
 // Build
-func BuildContract() (bool, error) {
-	cmd := exec.Command("tinygo", "build", "-size", "short", "-no-debug", "-panic=trap", "-scheduler=none", "-gc=leaking", "-o", "main.wasm", "-target", "wasm-unknown", "./")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("First build attempt failed: %s\n", string(output))
 
-		fmt.Println("Retrying build...")
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			fmt.Printf("Second build attempt failed: %s\n", string(output))
-			return true, err
-		}
-	}
+func HandleBuild() {
+	BuildContract()
+}
+func BuildContract() {
+	RunWithRetry("tinygo", []string{
+		"build", "-size", "short", "-no-debug", "-panic=trap",
+		"-scheduler=none", "-gc=leaking", "-o", "main.wasm",
+		"-target", "wasm-unknown", "./",
+	}, "build")
 
-	fmt.Println("Project build completed!")
-
+	// After successful build, list the output file
 	listCmd := exec.Command("ls", "-lh", "main.wasm")
 	listOutput, err := listCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error listing the file: %s\n", string(listOutput))
-		return true, err
+		return
 	}
 
 	fmt.Println(string(listOutput))
-	return false, nil
+	fmt.Println("Project build completed!")
 }
 
 // Build
+
+// Test
+
+func HandleTests(testType string) {
+	switch testType {
+	case "project":
+		ProjectTest()
+	case "package":
+		PackageTest()
+	default:
+		fmt.Println("Invalid test type! Use 'project' or 'package'.")
+	}
+}
+
+func ProjectTest() {
+	RunWithRetry("tinygo", []string{"test", "./..."}, "project")
+}
+
+func PackageTest() {
+	RunWithRetry("tinygo", []string{"test", "./"}, "package")
+}
+
+func FullTest() {
+	ProjectTest()
+	//Integration tests, etc
+}
+
+//Test
+
 func main() {
 	app := &cli.App{
 		Name:  "near-go",
@@ -176,7 +223,7 @@ func main() {
 						return fmt.Errorf("both project-name and module-name must be provided")
 					}
 
-					CreateProject(projectName, moduleName)
+					HandleCreateProject(projectName, moduleName)
 					return nil
 				},
 			},
@@ -184,21 +231,40 @@ func main() {
 				Name:  "build",
 				Usage: "Build the project",
 				Action: func(c *cli.Context) error {
-					shouldReturn, err := BuildContract()
-					if shouldReturn {
-						return err
-					}
+					HandleBuild()
 					return nil
 				},
 			},
 			{
-				Name:  "deploy",
-				Usage: "Deploy the project to production",
-				Action: func(c *cli.Context) error {
-					//1.Contract dev,prod
-					//2.client ?
-					fmt.Println("Project deployed to production!")
-					return nil
+				Name:  "test",
+				Usage: "Run tests",
+				Subcommands: []cli.Command{
+					{
+						Name:  "project",
+						Usage: "Test the project",
+						Action: func(c *cli.Context) error {
+							fmt.Println("Project test completed!")
+							HandleTests("project")
+							return nil
+						},
+					},
+					{
+						Name:  "package",
+						Usage: "Test the package",
+						Action: func(c *cli.Context) error {
+							HandleTests("package")
+							fmt.Println("Package test completed!")
+							return nil
+						},
+					},
+					// {
+					// 	Name:  "integration",
+					// 	Usage: "Integration Tests",
+					// 	Action: func(c *cli.Context) error {
+					// 		fmt.Println("Package test completed!")
+					// 		return nil
+					// 	},
+					// },
 				},
 			},
 			{
@@ -236,33 +302,13 @@ func main() {
 				},
 			},
 			{
-				Name:  "test",
-				Usage: "Run tests",
-				Subcommands: []cli.Command{
-					{
-						Name:  "project",
-						Usage: "Test the project",
-						Action: func(c *cli.Context) error {
-							fmt.Println("Project test completed!")
-							return nil
-						},
-					},
-					{
-						Name:  "package",
-						Usage: "Test the package",
-						Action: func(c *cli.Context) error {
-							fmt.Println("Package test completed!")
-							return nil
-						},
-					},
-					{
-						Name:  "integration",
-						Usage: "Integration Tests",
-						Action: func(c *cli.Context) error {
-							fmt.Println("Package test completed!")
-							return nil
-						},
-					},
+				Name:  "deploy",
+				Usage: "Deploy the project to production",
+				Action: func(c *cli.Context) error {
+					//1.Contract dev,prod
+					//2.client ?
+					fmt.Println("Project deployed to production!")
+					return nil
 				},
 			},
 		},
