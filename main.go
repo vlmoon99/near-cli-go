@@ -273,13 +273,33 @@ func main() {
 				Subcommands: []cli.Command{
 					{
 						Name:  "create",
-						Usage: "Create a new account for development",
+						Usage: "Create a new account on the Near Blockchain",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "network, n",
+								Usage:    "Specify the netowrk of the account",
+								Required: true,
+							},
+							&cli.StringFlag{
+								Name:     "account-name, a",
+								Usage:    "Specify the account name",
+								Required: true,
+							},
+						},
 						Action: func(c *cli.Context) error {
-							//1.dev prod
-							if err := NearCLIWrapper("account"); err != nil {
-								fmt.Printf("Error: %s\n", err)
+							network := c.String("network")
+							name := c.String("account-name")
+
+							if network == "" || name == "" {
+								return fmt.Errorf("Both 'network' and 'account-name' must be provided.")
 							}
-							fmt.Println("Dev account created!")
+
+							if err := NearCLIWrapper(fmt.Sprintf("account create-account sponsor-by-faucet-service %s autogenerate-new-keypair save-to-legacy-keychain network-config %s create", name, network)); err != nil {
+								fmt.Printf("Error: %s\n", err)
+								return err
+							}
+
+							fmt.Println("Development account created successfully!")
 							return nil
 						},
 					},
