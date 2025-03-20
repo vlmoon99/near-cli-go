@@ -43,13 +43,13 @@ package main
 // 	}
 
 // 	fmt.Println("Deploying contract...")
-// 	deployCmd := []string{
-// 		"contract", "deploy", smartContractID, "use-file", "./main.wasm",
-// 		"without-init-call",
-// 		"network-config", network,
-// 		"sign-with-legacy-keychain",
-// 		"send",
-// 	}
+// deployCmd := []string{
+// 	"contract", "deploy", smartContractID, "use-file", "./main.wasm",
+// 	"without-init-call",
+// 	"network-config", network,
+// 	"sign-with-legacy-keychain",
+// 	"send",
+// }
 // 	output, err := runCommand("near", deployCmd...)
 // 	if err != nil {
 // 		log.Fatalf("Error deploying contract: %v\n%s", err, string(output))

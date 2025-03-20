@@ -306,16 +306,13 @@ func main() {
 					{
 						Name:  "import",
 						Usage: "Import an account",
-						Flags: []cli.Flag{
-							&cli.StringFlag{
-								Name:  "type",
-								Value: "dev",
-								Usage: "Specify account type (e.g., dev, prod)",
-							},
-						},
 						Action: func(c *cli.Context) error {
-							//1. dev prod
-							fmt.Printf("Account imported for: %s\n", c.String("type"))
+							if err := NearCLIWrapper("account", "import-account"); err != nil {
+								fmt.Printf("Error: %s\n", err)
+								return err
+							}
+
+							fmt.Println("Account imported successfully!")
 							return nil
 						},
 					},
@@ -324,9 +321,39 @@ func main() {
 			{
 				Name:  "deploy",
 				Usage: "Deploy the project to production",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "contract-id, id",
+						Usage:    "Specify the smart contract id",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "network, n",
+						Usage:    "Specify the netowrk of the account",
+						Required: true,
+					},
+				},
 				Action: func(c *cli.Context) error {
+					smartContractID := c.String("contract-id")
+					network := c.String("network")
+
+					if network == "" || smartContractID == "" {
+						return fmt.Errorf("Both 'network' and 'contract-id' must be provided.")
+					}
 					//1.Contract dev,prod
-					//2.client ?
+					deployCmd := []string{
+						"contract", "deploy", smartContractID, "use-file", "./main.wasm",
+						"without-init-call",
+						"network-config", network,
+						"sign-with-legacy-keychain",
+						"send",
+					}
+
+					if err := NearCLIWrapper(deployCmd...); err != nil {
+						fmt.Printf("Error: %s\n", err)
+						return err
+					}
+
 					fmt.Println("Project deployed to production!")
 					return nil
 				},
