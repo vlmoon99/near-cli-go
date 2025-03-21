@@ -2,26 +2,38 @@
 
 REPO="vlmoon99/near-cli-go"
 LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
-INSTALL_DIR="$HOME/bin"  # Install to user's home directory instead of /usr/local/bin
+INSTALL_DIR="$HOME/bin"  # Install to user's home directory
 BINARY_NAME="near-go"
 
-echo "🔍 Detecting OS..."
+echo "🔍 Detecting OS and Architecture..."
 OS=$(uname -s)
 ARCH=$(uname -m)
+
+# Pre-installation: list the OS types
+echo "📋 Supported OS types:"
+echo " - Linux (x86_64, aarch64)"
+echo " - macOS (arm64, amd64)"
+echo
 
 # Determine the correct binary name based on the OS and architecture
 if [ "$OS" = "Linux" ]; then
     if [ "$ARCH" = "x86_64" ]; then
         FILENAME="near-cli-linux-amd64"
+        echo "✅ OS: Linux, Architecture: $ARCH"
+    elif [ "$ARCH" = "aarch64" ]; then
+        FILENAME="near-cli-linux-arm64"
+        echo "✅ OS: Linux, Architecture: $ARCH"
     else
-        echo "❌ Unsupported architecture: $ARCH"
+        echo "❌ Unsupported architecture: $ARCH for Linux"
         exit 1
     fi
 elif [ "$OS" = "Darwin" ]; then
     if [ "$ARCH" = "arm64" ]; then
         FILENAME="near-cli-mac-arm64"
+        echo "✅ OS: macOS, Architecture: $ARCH"
     else
         FILENAME="near-cli-mac-amd64"
+        echo "✅ OS: macOS, Architecture: $ARCH"
     fi
 else
     echo "❌ Unsupported OS: $OS"

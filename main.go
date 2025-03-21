@@ -2,12 +2,19 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 
 	"github.com/urfave/cli"
+)
+
+const (
+	ErrProvidedNetwork               = "(USER_INPUT_ERROR): Network must be provided"
+	ErrProvidedNetworkAndAccountName = "(USER_INPUT_ERROR): Both 'network' and 'account-name' must be provided"
+	ErrProvidedNetworkAndContractId  = "(USER_INPUT_ERROR): Both 'network' and 'contract-id' must be provided"
 )
 
 //Utils
@@ -24,7 +31,7 @@ func NearCLIWrapper(args ...string) error {
 	return nil
 }
 
-func RunWithRetry(command string, args []string, entityType string) {
+func TinygoRunWithRetryWrapper(command string, args []string, entityType string) {
 	fmt.Printf("Running tests for the %s...\n", entityType)
 
 	cmd := exec.Command(command, args...)
@@ -146,8 +153,9 @@ func CreateSmartContractProject(moduleName string) {
 func HandleBuild() {
 	BuildContract()
 }
+
 func BuildContract() {
-	RunWithRetry("tinygo", []string{
+	TinygoRunWithRetryWrapper("tinygo", []string{
 		"build", "-size", "short", "-no-debug", "-panic=trap",
 		"-scheduler=none", "-gc=leaking", "-o", "main.wasm",
 		"-target", "wasm-unknown", "./",
@@ -180,11 +188,11 @@ func HandleTests(testType string) {
 }
 
 func ProjectTest() {
-	RunWithRetry("tinygo", []string{"test", "./..."}, "project")
+	TinygoRunWithRetryWrapper("tinygo", []string{"test", "./..."}, "project")
 }
 
 func PackageTest() {
-	RunWithRetry("tinygo", []string{"test", "./"}, "package")
+	TinygoRunWithRetryWrapper("tinygo", []string{"test", "./"}, "package")
 }
 
 func FullTest() {
@@ -281,11 +289,12 @@ func main() {
 							name := c.String("account-name")
 
 							if network == "" {
-								return fmt.Errorf("Network must be provided.")
+								return errors.New(ErrProvidedNetwork)
 							}
 
 							if network == "dev" && name == "" {
-								return fmt.Errorf("Both 'network' and 'account-name' must be provided.")
+								return errors.New(ErrProvidedNetworkAndAccountName)
+
 							}
 
 							if network == "prod" {
@@ -339,7 +348,8 @@ func main() {
 					network := c.String("network")
 
 					if network == "" || smartContractID == "" {
-						return fmt.Errorf("Both 'network' and 'contract-id' must be provided.")
+						return errors.New(ErrProvidedNetworkAndContractId)
+
 					}
 					deployCmd := []string{
 						"contract", "deploy", smartContractID, "use-file", "./main.wasm",
