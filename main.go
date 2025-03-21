@@ -47,7 +47,7 @@ func RunWithRetry(command string, args []string, entityType string) {
 }
 
 func RunCommand(name string, args ...string) ([]byte, error) {
-	fmt.Printf("Running command: %s %v\n", name, args) // Log the command being executed
+	fmt.Printf("Running command: %s %v\n", name, args)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
@@ -61,7 +61,7 @@ func RunCommand(name string, args ...string) ([]byte, error) {
 
 	if err := cmd.Wait(); err != nil {
 		fmt.Printf("Command execution error: %v\n", err)
-		fmt.Printf("Stderr: %s\n", stderr.String()) // Log stderr for debugging
+		fmt.Printf("Stderr: %s\n", stderr.String())
 		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
 
@@ -153,7 +153,6 @@ func BuildContract() {
 		"-target", "wasm-unknown", "./",
 	}, "build")
 
-	// After successful build, list the output file
 	listCmd := exec.Command("ls", "-lh", "main.wasm")
 	listOutput, err := listCmd.CombinedOutput()
 	if err != nil {
@@ -190,7 +189,6 @@ func PackageTest() {
 
 func FullTest() {
 	ProjectTest()
-	//Integration tests, etc
 }
 
 //Test
@@ -257,14 +255,6 @@ func main() {
 							return nil
 						},
 					},
-					// {
-					// 	Name:  "integration",
-					// 	Usage: "Integration Tests",
-					// 	Action: func(c *cli.Context) error {
-					// 		fmt.Println("Package test completed!")
-					// 		return nil
-					// 	},
-					// },
 				},
 			},
 			{
@@ -283,20 +273,31 @@ func main() {
 							&cli.StringFlag{
 								Name:     "account-name, a",
 								Usage:    "Specify the account name",
-								Required: true,
+								Required: false,
 							},
 						},
 						Action: func(c *cli.Context) error {
 							network := c.String("network")
 							name := c.String("account-name")
 
-							if network == "" || name == "" {
+							if network == "" {
+								return fmt.Errorf("Network must be provided.")
+							}
+
+							if network == "dev" && name == "" {
 								return fmt.Errorf("Both 'network' and 'account-name' must be provided.")
 							}
 
-							if err := NearCLIWrapper(fmt.Sprintf("account create-account sponsor-by-faucet-service %s autogenerate-new-keypair save-to-legacy-keychain network-config %s create", name, network)); err != nil {
-								fmt.Printf("Error: %s\n", err)
-								return err
+							if network == "prod" {
+								if err := NearCLIWrapper("account", "create-account", "fund-later", "use-auto-generation", "save-to-folder", "./"); err != nil {
+									fmt.Printf("Error: %s\n", err)
+									return err
+								}
+							} else {
+								if err := NearCLIWrapper("account", "create-account", "sponsor-by-faucet-service", name, "autogenerate-new-keypair", "save-to-legacy-keychain", "network-config", "testnet", "create"); err != nil {
+									fmt.Printf("Error: %s\n", err)
+									return err
+								}
 							}
 
 							fmt.Println("Development account created successfully!")
@@ -340,7 +341,6 @@ func main() {
 					if network == "" || smartContractID == "" {
 						return fmt.Errorf("Both 'network' and 'contract-id' must be provided.")
 					}
-					//1.Contract dev,prod
 					deployCmd := []string{
 						"contract", "deploy", smartContractID, "use-file", "./main.wasm",
 						"without-init-call",
@@ -354,7 +354,7 @@ func main() {
 						return err
 					}
 
-					fmt.Println("Project deployed to production!")
+					fmt.Println("Smart Contract deployed !")
 					return nil
 				},
 			},
