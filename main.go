@@ -11,10 +11,20 @@ import (
 	"github.com/urfave/cli"
 )
 
+//Constants
+
 const (
-	ErrProvidedNetwork               = "(USER_INPUT_ERROR): Network must be provided"
-	ErrProvidedNetworkAndAccountName = "(USER_INPUT_ERROR): Both 'network' and 'account-name' must be provided"
-	ErrProvidedNetworkAndContractId  = "(USER_INPUT_ERROR): Both 'network' and 'contract-id' must be provided"
+	SmartContractTypeProject        = "smart-contract"
+	FullStackTypeProjectReactNodeJs = "full-stack-react-nodejs"
+)
+
+// Errors
+
+const (
+	ErrProvidedNetwork                   = "(USER_INPUT_ERROR): Network must be provided"
+	ErrProvidedNetworkAndAccountName     = "(USER_INPUT_ERROR): Both 'network' and 'account-name' must be provided"
+	ErrProvidedNetworkAndContractId      = "(USER_INPUT_ERROR): Both 'network' and 'contract-id' must be provided"
+	ErrProvidedProjectNameModuleNameType = "(USER_INPUT_ERROR): Both 'project-name' and 'module-name' and 'type' must be provided"
 )
 
 //Utils
@@ -93,25 +103,48 @@ func WriteToFile(filename, content string) {
 	}
 }
 
+func CreateFolderAndNavigateThere(name string) {
+	if err := os.Mkdir(name, os.ModePerm); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Chdir(name); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ChangeToParentDirectory() {
+	if err := os.Chdir(".."); err != nil {
+		log.Fatalf("Error navigating to parent directory: %v", err)
+	}
+
+	fmt.Println("Changed directory to parent.")
+}
+
 //Utils
 
 // Project
 
-func HandleCreateProject(projectName, moduleName string) {
+func HandleCreateProject(projectName, projectType, moduleName string) {
 	fmt.Println("Creating project directory...")
-	if err := os.Mkdir(projectName, os.ModePerm); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Chdir(projectName); err != nil {
-		log.Fatal(err)
-	}
+	CreateFolderAndNavigateThere(projectName)
 
-	CreateSmartContractProject(moduleName)
+	if projectType == SmartContractTypeProject {
+		CreateSmartContractProject(moduleName)
+
+	} else if projectType == FullStackTypeProjectReactNodeJs {
+		CreateSmartContractProject(moduleName)
+		ChangeToParentDirectory()
+		CreateReactClientProject()
+		ChangeToParentDirectory()
+		CreateNodeJsBackendProject()
+	}
 
 	fmt.Println("Project created successfully!")
 }
 
 func CreateSmartContractProject(moduleName string) {
+	CreateFolderAndNavigateThere("contract")
+
 	fmt.Println("Initializing Go module...")
 	RunCommand("go", "mod", "init", moduleName)
 
@@ -144,6 +177,42 @@ func CreateSmartContractProject(moduleName string) {
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
 		log.Fatal("Error: Cannot compile. main.go is missing.")
 	}
+}
+
+func CreateReactClientProject() {
+	CreateFolderAndNavigateThere("client")
+
+	fmt.Println("Initializing React project with Vite...")
+
+	command := "echo 'y' | npx create-vite@latest . --template react"
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("Error initializing React project with Vite: %v", err)
+	}
+
+	fmt.Println("Installing dependencies...")
+	RunCommand("npm", "install")
+
+	fmt.Println("React client setup complete!")
+}
+
+func CreateNodeJsBackendProject() {
+	CreateFolderAndNavigateThere("backend")
+
+	fmt.Println("Initializing Node.js project...")
+	RunCommand("npm", "init", "-y")
+
+	fmt.Println("Creating simple server file...")
+	code := `
+	console.log("Hello World!")
+	`
+	fmt.Println("React client setup complete!")
+	WriteToFile("index.js", code)
+
+	fmt.Println("Node.js server setup complete!")
 }
 
 // Project
@@ -217,19 +286,25 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:     "module-name, m",
-						Usage:    "Specify the module name for Go project",
+						Usage:    "Specify the module name for Go Smart Contract project , it can be your github for example 'https://github.com/{accountId}/{prjectName}'",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "project-type, t",
+						Usage:    "Specify the type of the project, it can be 'smart-contract', 'full-stack'",
 						Required: true,
 					},
 				},
 				Action: func(c *cli.Context) error {
 					projectName := c.String("project-name")
+					projectType := c.String("project-type")
 					moduleName := c.String("module-name")
 
-					if projectName == "" || moduleName == "" {
-						return fmt.Errorf("both project-name and module-name must be provided")
+					if projectName == "" || projectType == "" || moduleName == "" {
+						return errors.New(ErrProvidedProjectNameModuleNameType)
 					}
 
-					HandleCreateProject(projectName, moduleName)
+					HandleCreateProject(projectName, projectType, moduleName)
 					return nil
 				},
 			},
