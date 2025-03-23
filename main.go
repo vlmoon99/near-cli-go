@@ -25,6 +25,8 @@ const (
 	ErrProvidedNetworkAndAccountName     = "(USER_INPUT_ERROR): Both 'network' and 'account-name' must be provided"
 	ErrProvidedNetworkAndContractId      = "(USER_INPUT_ERROR): Both 'network' and 'contract-id' must be provided"
 	ErrProvidedProjectNameModuleNameType = "(USER_INPUT_ERROR): Both 'project-name' and 'module-name' and 'type' must be provided"
+	ErrRunningNearCLI                    = "(INTERNAL_UTILS): error running Near CLI"
+	ErrRunningCmd                        = "(INTERNAL_UTILS): start error"
 )
 
 //Utils
@@ -36,7 +38,7 @@ func NearCLIWrapper(args ...string) error {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error running Near CLI: %w", err)
+		return fmt.Errorf("%s: %w", ErrRunningNearCLI, err)
 	}
 	return nil
 }
@@ -73,7 +75,8 @@ func RunCommand(name string, args ...string) ([]byte, error) {
 
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("Command start error: %v\n", err)
-		return nil, fmt.Errorf("start error: %v", err)
+
+		return nil, fmt.Errorf("%s: %v", ErrRunningCmd, err)
 	}
 
 	if err := cmd.Wait(); err != nil {
