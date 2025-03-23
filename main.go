@@ -18,15 +18,27 @@ const (
 	FullStackTypeProjectReactNodeJs = "full-stack-react-nodejs"
 )
 
+const (
+	SmartContractProjectFolder = "contract"
+	ClientProjectFolder        = "client"
+	BackendProjectFolder       = "backend"
+)
+
 // Errors
 
 const (
-	ErrProvidedNetwork                   = "(USER_INPUT_ERROR): Network must be provided"
-	ErrProvidedNetworkAndAccountName     = "(USER_INPUT_ERROR): Both 'network' and 'account-name' must be provided"
-	ErrProvidedNetworkAndContractId      = "(USER_INPUT_ERROR): Both 'network' and 'contract-id' must be provided"
-	ErrProvidedProjectNameModuleNameType = "(USER_INPUT_ERROR): Both 'project-name' and 'module-name' and 'type' must be provided"
-	ErrRunningNearCLI                    = "(INTERNAL_UTILS): error running Near CLI"
-	ErrRunningCmd                        = "(INTERNAL_UTILS): start error"
+	ErrProvidedNetwork                   = "(USER_INPUT_ERROR): Missing 'network'"
+	ErrProvidedNetworkAndAccountName     = "(USER_INPUT_ERROR): Missing both 'network' and 'account-name'"
+	ErrProvidedNetworkAndContractId      = "(USER_INPUT_ERROR): Missing both 'network' and 'contract-id'"
+	ErrProvidedProjectNameModuleNameType = "(USER_INPUT_ERROR): Missing 'project-name', 'module-name', or 'type'"
+	ErrIncorrectType                     = "(USER_INPUT_ERROR): Invalid project type"
+	ErrRunningNearCLI                    = "(INTERNAL_UTILS): Failed to execute Near CLI"
+	ErrRunningCmd                        = "(INTERNAL_UTILS): Failed to start command"
+	ErrNavPrevDir                        = "(INTERNAL_UTILS): Failed to navigate to previous directory"
+	ErrInitReactVite                     = "(INTERNAL_PROJECT): Failed to initialize React project with Vite"
+	ErrGoProjectModFileIsMissing         = "(INTERNAL_PROJECT): Missing 'go.mod' file"
+	ErrGoProjectSumFileIsMissing         = "(INTERNAL_PROJECT): Missing 'go.sum' file"
+	ErrGoProjectMainGoFileIsMissing      = "(INTERNAL_PROJECT): Missing 'main.go' file"
 )
 
 //Utils
@@ -115,12 +127,12 @@ func CreateFolderAndNavigateThere(name string) {
 	}
 }
 
-func ChangeToParentDirectory() {
+func GoBackToThePrevDirectory() {
 	if err := os.Chdir(".."); err != nil {
-		log.Fatalf("Error navigating to parent directory: %v", err)
+		log.Fatalf("%s: %v", ErrNavPrevDir, err)
 	}
 
-	fmt.Println("Changed directory to parent.")
+	fmt.Println("Changed directory to previous.")
 }
 
 //Utils
@@ -128,38 +140,41 @@ func ChangeToParentDirectory() {
 // Project
 
 func HandleCreateProject(projectName, projectType, moduleName string) {
-	fmt.Println("Creating project directory...")
-	CreateFolderAndNavigateThere(projectName)
-
 	if projectType == SmartContractTypeProject {
+		fmt.Println("Creating project directory...")
+		CreateFolderAndNavigateThere(projectName)
 		CreateSmartContractProject(moduleName)
+		fmt.Println("Project created successfully!")
 
 	} else if projectType == FullStackTypeProjectReactNodeJs {
+		fmt.Println("Creating project directory...")
+		CreateFolderAndNavigateThere(projectName)
 		CreateSmartContractProject(moduleName)
-		ChangeToParentDirectory()
+		GoBackToThePrevDirectory()
 		CreateReactClientProject()
-		ChangeToParentDirectory()
+		GoBackToThePrevDirectory()
 		CreateNodeJsBackendProject()
+		fmt.Println("Project created successfully!")
+	} else {
+		log.Fatal(ErrIncorrectType)
 	}
-
-	fmt.Println("Project created successfully!")
 }
 
 func CreateSmartContractProject(moduleName string) {
-	CreateFolderAndNavigateThere("contract")
+	CreateFolderAndNavigateThere(SmartContractProjectFolder)
 
 	fmt.Println("Initializing Go module...")
 	RunCommand("go", "mod", "init", moduleName)
 
 	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
-		log.Fatal("Error: go.mod is missing.")
+		log.Fatal(ErrGoProjectModFileIsMissing)
 	}
 
 	fmt.Println("Installing dependencies...")
 	RunCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.8")
 
 	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
-		log.Fatal("Error: Cannot compile. go.sum is missing.")
+		log.Fatal(ErrGoProjectSumFileIsMissing)
 	}
 
 	fmt.Println("Creating main.go file...")
@@ -178,12 +193,12 @@ func CreateSmartContractProject(moduleName string) {
 	WriteToFile("main.go", code)
 
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
-		log.Fatal("Error: Cannot compile. main.go is missing.")
+		log.Fatal(ErrGoProjectMainGoFileIsMissing)
 	}
 }
 
 func CreateReactClientProject() {
-	CreateFolderAndNavigateThere("client")
+	CreateFolderAndNavigateThere(ClientProjectFolder)
 
 	fmt.Println("Initializing React project with Vite...")
 
@@ -193,7 +208,7 @@ func CreateReactClientProject() {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("Error initializing React project with Vite: %v", err)
+		log.Fatalf("%s: %v", ErrInitReactVite, err)
 	}
 
 	fmt.Println("Installing dependencies...")
@@ -203,7 +218,7 @@ func CreateReactClientProject() {
 }
 
 func CreateNodeJsBackendProject() {
-	CreateFolderAndNavigateThere("backend")
+	CreateFolderAndNavigateThere(BackendProjectFolder)
 
 	fmt.Println("Initializing Node.js project...")
 	RunCommand("npm", "init", "-y")
