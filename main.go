@@ -35,10 +35,10 @@ const (
 	ErrRunningNearCLI                    = "(INTERNAL_UTILS): Failed to execute Near CLI"
 	ErrRunningCmd                        = "(INTERNAL_UTILS): Failed to start command"
 	ErrNavPrevDir                        = "(INTERNAL_UTILS): Failed to navigate to previous directory"
-	ErrInitReactVite                     = "(INTERNAL_PROJECT): Failed to initialize React project with Vite"
-	ErrGoProjectModFileIsMissing         = "(INTERNAL_PROJECT): Missing 'go.mod' file"
-	ErrGoProjectSumFileIsMissing         = "(INTERNAL_PROJECT): Missing 'go.sum' file"
-	ErrGoProjectMainGoFileIsMissing      = "(INTERNAL_PROJECT): Missing 'main.go' file"
+	ErrInitReactVite                     = "(INTERNAL_PROJECT_CLIENT_REACT): Failed to initialize React project with Vite"
+	ErrGoProjectModFileIsMissing         = "(INTERNAL_PROJECT_CONTRACT): Missing 'go.mod' file"
+	ErrGoProjectSumFileIsMissing         = "(INTERNAL_PROJECT_CONTRACT): Missing 'go.sum' file"
+	ErrGoProjectMainGoFileIsMissing      = "(INTERNAL_PROJECT_CONTRACT): Missing 'main.go' file"
 )
 
 //Utils
@@ -195,6 +195,95 @@ func CreateSmartContractProject(moduleName string) {
 	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
 		log.Fatal(ErrGoProjectMainGoFileIsMissing)
 	}
+
+	CreateSmartContractIntegrationTests()
+	GoBackToThePrevDirectory()
+}
+
+func CreateSmartContractIntegrationTests() {
+	fmt.Println("Creating 'integration_tests' folder...")
+	CreateFolderAndNavigateThere("integration_tests")
+
+	fmt.Println("Initializing Cargo project...")
+	RunCommand("cargo", "init", "--bin")
+
+	cargoTomlContent := `
+[package]
+name = "integration_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.93"
+json-patch = "3.0.1"
+near-workspaces = "0.15.0"
+serde = "1.0.215"
+serde_json = "1.0.133"
+tokio = "1.41.1"
+near-gas = "0.3.0"
+`
+
+	fmt.Println("Writing Cargo.toml file...")
+	WriteToFile("Cargo.toml", cargoTomlContent)
+
+	integrationTestCode := `
+		use near_gas::NearGas;
+		use near_workspaces::types::NearToken;
+		use serde_json::json;
+
+		async fn deploy_contract(worker: &near_workspaces::Worker<near_workspaces::network::Sandbox>) -> anyhow::Result<near_workspaces::Contract> {
+			const WASM_FILEPATH: &str = "../main.wasm";
+			let wasm = std::fs::read(WASM_FILEPATH)?;
+			let contract = worker.dev_deploy(&wasm).await?;
+			Ok(contract)
+		}
+
+		async fn call_integration_test_function(
+			contract: &near_workspaces::Contract,
+			function_name: &str,
+			args: serde_json::Value,
+			deposit: NearToken,
+			gas: NearGas,
+		) -> anyhow::Result<()> {
+			let outcome = contract
+				.call(function_name)
+				.args_json(args)
+				.deposit(deposit)
+				.gas(gas)
+				.transact()
+				.await;
+
+			match outcome {
+				Ok(result) => {
+					println!("result.is_success: {:#?}", result.clone().is_success());
+					println!("Functions Logs: {:#?}", result.logs());
+					Ok(())
+				}
+				Err(err) => {
+					println!(
+						"{} result: Test failed with error: {:#?}",
+						function_name, err
+					);
+					Err(err.into())
+				}
+			}
+		}
+
+		#[tokio::main]
+		async fn main() -> anyhow::Result<()> {
+			let worker = near_workspaces::sandbox().await?;
+			let contract = deploy_contract(&worker).await?;
+			let standard_deposit = NearToken::from_near(3);
+			let standard_gas = NearGas::from_tgas(300);
+			println!("Dev Account ID: {}", contract.id());
+			Ok(())
+		}
+	`
+
+	fmt.Println("Writing boilerplate integration test code...")
+	WriteToFile("src/main.rs", integrationTestCode)
+
+	fmt.Println("Integration tests setup completed successfully!")
 }
 
 func CreateReactClientProject() {
