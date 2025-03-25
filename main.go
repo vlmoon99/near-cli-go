@@ -179,16 +179,178 @@ func CreateSmartContractProject(moduleName string) {
 
 	fmt.Println("Creating main.go file...")
 	code :=
-		`package main
+		`
+package main
 
-	import (
-		"github.com/vlmoon99/near-sdk-go/env"
-	)
+import (
+	"encoding/hex"
+	"fmt"
 
-	//go:export InitContract
-	func InitContract() {
-		env.LogString("Init Smart Contract")
-	}`
+	"github.com/vlmoon99/near-sdk-go/env"
+	"github.com/vlmoon99/near-sdk-go/json"
+	"github.com/vlmoon99/near-sdk-go/types"
+)
+
+//go:export InitContract
+func InitContract() {
+	env.LogString("Init Smart Contract")
+}
+
+//go:export WriteData
+func WriteData() {
+	options := types.ContractInputOptions{IsRawBytes: true}
+	input, detectedType, err := env.ContractInput(options)
+	if err != nil {
+		env.PanicStr("Failed to get contract input: " + err.Error())
+	}
+
+	env.LogString("Contract input (JSON): " + string(input))
+	env.LogString("Detected input type: " + detectedType)
+
+	if detectedType != "object" {
+		env.ContractValueReturn([]byte("Error : Incorrect type"))
+	}
+	parser := json.NewParser(input)
+
+	keyResult, err := parser.GetString("key")
+	if err != nil {
+		env.ContractValueReturn([]byte("Error : Incorrect key"))
+	}
+
+	dataResult, err := parser.GetRawBytes("data")
+	if err != nil {
+		env.ContractValueReturn([]byte("Error : Incorrect data"))
+	}
+
+	env.StorageWrite([]byte(keyResult), dataResult)
+	env.LogString("WriteData was successful")
+}
+
+//go:export ReadData
+func ReadData() {
+	options := types.ContractInputOptions{IsRawBytes: true}
+	input, detectedType, err := env.ContractInput(options)
+	if err != nil {
+		env.PanicStr("Failed to get contract input: " + err.Error())
+	}
+
+	env.LogString("Contract input (JSON): " + string(input))
+	env.LogString("Detected input type: " + detectedType)
+
+	if detectedType != "object" {
+		env.ContractValueReturn([]byte("Error : Incorrect type"))
+	}
+	parser := json.NewParser(input)
+
+	keyResult, err := parser.GetString("key")
+	if err != nil {
+		env.ContractValueReturn([]byte("Error : Incorrect key"))
+	}
+
+	data, err := env.StorageRead([]byte(keyResult))
+	if err != nil {
+		env.ContractValueReturn([]byte("Error : Incorrect read from the storage by that key"))
+	}
+	env.LogString("ReadData was successful")
+
+	env.ContractValueReturn(data)
+}
+
+//go:export AcceptPayment
+func AcceptPayment() {
+	attachedDeposit, err := env.GetAttachedDepoist()
+	if err != nil {
+		env.PanicStr("Failed to get attached deposit: " + err.Error())
+	}
+	env.LogString("Attachet Deposit :" + attachedDeposit.String())
+	promiseIdx := env.PromiseBatchCreate([]byte("neargocli.testnet"))
+	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
+	env.PromiseReturn(promiseIdx)
+	//neargocli.testnet
+	env.LogString("AcceptPayment")
+}
+
+//go:export ReadIncommingTxData
+func ReadIncommingTxData() {
+
+	options := types.ContractInputOptions{IsRawBytes: true}
+	input, detectedType, err := env.ContractInput(options)
+	if err != nil {
+		env.PanicStr("Failed to get contract input: " + err.Error())
+	}
+	env.LogString("Contract input (raw bytes): " + string(input))
+	env.LogString("Detected input type: " + detectedType)
+
+	attachedDeposit, err := env.GetAttachedDepoist()
+	if err != nil {
+		env.PanicStr("Failed to get attached deposit: " + err.Error())
+	}
+	env.LogString(fmt.Sprintf("Attached deposit: %s", attachedDeposit.String()))
+
+	accountId, err := env.GetCurrentAccountId()
+	if err != nil || accountId == "" {
+		env.PanicStr("Failed to get current account ID: " + err.Error())
+	}
+	env.LogString("Current account ID: " + accountId)
+
+	signerId, err := env.GetSignerAccountID()
+	if err != nil || signerId == "" {
+		env.PanicStr("Failed to get signer account ID: " + err.Error())
+	}
+	env.LogString("Signer account ID: " + signerId)
+
+	signerPK, err := env.GetSignerAccountPK()
+	if err != nil || signerPK == nil {
+		env.PanicStr("Failed to get signer account PK: " + err.Error())
+	}
+	env.LogString("Signer account PK: " + hex.EncodeToString(signerPK))
+
+	predecessorId, err := env.GetPredecessorAccountID()
+	if err != nil || predecessorId == "" {
+		env.PanicStr("Failed to get predecessor account ID: " + err.Error())
+	}
+	env.LogString("Predecessor account ID: " + predecessorId)
+
+	blockHeight := env.GetCurrentBlockHeight()
+	env.LogString("Current block height: " + fmt.Sprintf("%d", blockHeight))
+
+	blockTimeMs := env.GetBlockTimeMs()
+	env.LogString("Block time in ms: " + fmt.Sprintf("%d", blockTimeMs))
+
+	epochHeight := env.GetEpochHeight()
+	env.LogString("Epoch height: " + fmt.Sprintf("%d", epochHeight))
+
+	storageUsage := env.GetStorageUsage()
+	env.LogString("Storage usage: " + fmt.Sprintf("%d", storageUsage))
+
+	accountBalance, err := env.GetAccountBalance()
+	if err != nil {
+		env.PanicStr("Failed to get account balance: " + err.Error())
+	}
+	env.LogString(fmt.Sprintf("Account balance: %s", accountBalance.String()))
+
+	lockedBalance, err := env.GetAccountLockedBalance()
+	if err != nil {
+		env.PanicStr("Failed to get account locked balance: " + err.Error())
+	}
+	env.LogString(fmt.Sprintf("Account locked balance: %s", lockedBalance.String()))
+
+	prepaidGas := env.GetPrepaidGas()
+	env.LogString(fmt.Sprintf("Prepaid gas: %ds", prepaidGas.Inner))
+
+	usedGas := env.GetUsedGas()
+	env.LogString(fmt.Sprintf("Used gas: %d", usedGas.Inner))
+
+	env.LogString("ReadIncommingTxData")
+}
+
+//go:export ReadBlockchainData
+func ReadBlockchainData() {
+	//neargocli.testnet
+	env.LogString("ReadBlockchainData")
+}
+
+		`
 
 	WriteToFile("main.go", code)
 
@@ -227,57 +389,112 @@ near-gas = "0.3.0"
 	WriteToFile("Cargo.toml", cargoTomlContent)
 
 	integrationTestCode := `
-		use near_gas::NearGas;
-		use near_workspaces::types::NearToken;
-		use serde_json::json;
+use near_gas::NearGas;
+use near_workspaces::types::NearToken;
+use serde_json::json;
 
-		async fn deploy_contract(worker: &near_workspaces::Worker<near_workspaces::network::Sandbox>) -> anyhow::Result<near_workspaces::Contract> {
-			const WASM_FILEPATH: &str = "../main.wasm";
-			let wasm = std::fs::read(WASM_FILEPATH)?;
-			let contract = worker.dev_deploy(&wasm).await?;
-			Ok(contract)
-		}
+async fn deploy_contract(
+    worker: &near_workspaces::Worker<near_workspaces::network::Sandbox>,
+) -> anyhow::Result<near_workspaces::Contract> {
+    const WASM_FILEPATH: &str = "../main.wasm";
+    let wasm = std::fs::read(WASM_FILEPATH)?;
+    let contract = worker.dev_deploy(&wasm).await?;
+    Ok(contract)
+}
 
-		async fn call_integration_test_function(
-			contract: &near_workspaces::Contract,
-			function_name: &str,
-			args: serde_json::Value,
-			deposit: NearToken,
-			gas: NearGas,
-		) -> anyhow::Result<()> {
-			let outcome = contract
-				.call(function_name)
-				.args_json(args)
-				.deposit(deposit)
-				.gas(gas)
-				.transact()
-				.await;
+async fn call_integration_test_function(
+    contract: &near_workspaces::Contract,
+    function_name: &str,
+    args: serde_json::Value,
+    deposit: NearToken,
+    gas: NearGas,
+) -> anyhow::Result<()> {
+    let outcome = contract
+        .call(function_name)
+        .args_json(args)
+        .deposit(deposit)
+        .gas(gas)
+        .transact()
+        .await;
 
-			match outcome {
-				Ok(result) => {
-					println!("result.is_success: {:#?}", result.clone().is_success());
-					println!("Functions Logs: {:#?}", result.logs());
-					Ok(())
-				}
-				Err(err) => {
-					println!(
-						"{} result: Test failed with error: {:#?}",
-						function_name, err
-					);
-					Err(err.into())
-				}
-			}
-		}
+    match outcome {
+        Ok(result) => {
+            println!("result.is_success: {:#?}", result.clone().is_success());
+            println!("Functions Logs: {:#?}", result.logs());
+            Ok(())
+        }
+        Err(err) => {
+            println!(
+                "{} result: Test failed with error: {:#?}",
+                function_name, err
+            );
+            Err(err.into())
+        }
+    }
+}
 
-		#[tokio::main]
-		async fn main() -> anyhow::Result<()> {
-			let worker = near_workspaces::sandbox().await?;
-			let contract = deploy_contract(&worker).await?;
-			let standard_deposit = NearToken::from_near(3);
-			let standard_gas = NearGas::from_tgas(300);
-			println!("Dev Account ID: {}", contract.id());
-			Ok(())
-		}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let worker = sandbox().await?;
+    let contract = deploy_contract(&worker).await?;
+    let standard_deposit = NearToken::from_near(3);
+    let standard_gas = NearGas::from_tgas(300);
+    println!("Dev Account ID: {}", contract.id());
+
+    let success_results = vec![
+        call_integration_test_function(
+            &contract,
+            "InitContract",
+            json!({}),
+            standard_deposit,
+            standard_gas,
+        ).await,
+        call_integration_test_function(
+            &contract,
+            "WriteData",
+            json!({ "key": "testKey", "data": "testData" }),
+            standard_deposit,
+            standard_gas,
+        ).await,
+        call_integration_test_function(
+            &contract,
+            "ReadData",
+            json!({ "key": "testKey" }),
+            standard_deposit,
+            standard_gas,
+        ).await,
+        call_integration_test_function(
+            &contract,
+            "AcceptPayment",
+            json!({}),
+            standard_deposit,
+            standard_gas,
+        ).await,
+        call_integration_test_function(
+            &contract,
+            "ReadIncommingTxData",
+            json!({}),
+            standard_deposit,
+            standard_gas,
+        ).await,
+        call_integration_test_function(
+            &contract,
+            "ReadBlockchainData",
+            json!({}),
+            standard_deposit,
+            standard_gas,
+        ).await,
+    ];
+
+    for result in success_results {
+        if let Err(e) = result {
+            eprintln!("Error: {:?}", e);
+        }
+    }
+
+    Ok(())
+}
 	`
 
 	fmt.Println("Writing boilerplate integration test code...")
