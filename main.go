@@ -531,10 +531,105 @@ func CreateNodeJsBackendProject() {
 
 	fmt.Println("Creating simple server file...")
 	code := `
-	console.log("Hello World!")
+//1.Indexer
+
+// import { startStream, types } from "near-lake-framework";
+
+// const lakeConfig = {
+//   s3BucketName: "near-lake-data-mainnet",
+//   s3RegionName: "eu-central-1",
+//   startBlockHeight: 63804051,
+// };
+
+// async function handleStreamerMessage(
+//   streamerMessage
+// ) {
+//   const relevantOutcomes =
+//     streamerMessage.shards
+//       .flatMap((shard) => shard.receiptExecutionOutcomes)
+//       .map((outcome) => ({
+//         receipt: {
+//           id: outcome.receipt.receiptId,
+//           receiverId: outcome.receipt.receiverId,
+//         },
+//         nearSocialMethodCallData: mapOutcomeToNearSocialNotifyObject(outcome),
+//       }))
+//       .filter((relevantOutcome) => {
+//         return (
+//           relevantOutcome.receipt.receiverId == "your_account_id_smart_contract" 
+//         );
+//       });
+// }
+
+// (async () => {
+//   await startStream(lakeConfig, handleStreamerMessage);
+// })();
+
+
+//2.Backend for transaction processing and other blockchain operation
+
+// import { connect, keyStores, KeyPair, utils } from "near-api-js";
+// import dotenv from "dotenv";
+
+// dotenv.config({ path: "../.env" });
+// const privateKey = process.env.PRIVATE_KEY;
+// const accountId = process.env.ACCOUNT_ID;
+
+// const myKeyStore = new keyStores.InMemoryKeyStore();
+// const keyPair = KeyPair.fromString(privateKey);
+// await myKeyStore.setKey("testnet", accountId, keyPair);
+
+// const connectionConfig = {
+//   networkId: "testnet",
+//   keyStore: myKeyStore,
+//   nodeUrl: "https://rpc.testnet.near.org",
+// };
+// const nearConnection = await connect(connectionConfig);
+
+// const account = await nearConnection.account(accountId);
+
+
+// Create all operations on the blockchain
 	`
 	fmt.Println("React client setup complete!")
 	WriteToFile("index.js", code)
+
+	gitIgnoreFile :=
+		`
+{
+  "type": "module",
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "near-lake-framework": "^2.0.0",
+    "borsh": "2.0.0",
+    "dotenv": "^16.4.7",
+    "js-sha256": "^0.11.0",
+    "near-api-js": "^4.0.4",
+    "near-seed-phrase": "^0.2.1"
+  }
+}
+	
+`
+	WriteToFile(".gitignore", gitIgnoreFile)
+
+	dotEnvFile := `
+
+AWS_ACCESS_KEY_ID = YOUR_AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY = YOUR_AWS_SECRET_ACCESS_KEY
+PRIVATE_KEY = privatekey
+ACCOUNT_ID = accountid
+
+	`
+	WriteToFile(".env", dotEnvFile)
 
 	fmt.Println("Node.js server setup complete!")
 }
