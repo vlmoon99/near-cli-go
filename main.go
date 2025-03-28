@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -518,7 +519,90 @@ func CreateReactClientProject() {
 	}
 
 	fmt.Println("Installing dependencies...")
-	RunCommand("npm", "install")
+	RunCommand("yarn", "install")
+
+	RunCommand("yarn", "add", "near-api-js")
+	RunCommand("yarn", "add", "@near-wallet-selector/core")
+	RunCommand("yarn", "add", "@near-wallet-selector/modal-ui")
+
+	RunCommand("yarn", "add", "@near-wallet-selector/my-near-wallet")
+	RunCommand("yarn", "add", "@near-wallet-selector/sender")
+	RunCommand("yarn", "add", "@near-wallet-selector/nearfi")
+	RunCommand("yarn", "add", "@near-wallet-selector/here-wallet")
+	RunCommand("yarn", "add", "@near-wallet-selector/math-wallet")
+	RunCommand("yarn", "add", "@near-wallet-selector/nightly")
+	RunCommand("yarn", "add", "@near-wallet-selector/meteor-wallet")
+	RunCommand("yarn", "add", "@near-wallet-selector/ledger")
+	RunCommand("yarn", "add", "@near-wallet-selector/wallet-connect")
+	RunCommand("yarn", "add", "@near-wallet-selector/default-wallets")
+	RunCommand("yarn", "add", "@near-wallet-selector/coin98-wallet")
+	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
+	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
+
+	// yarn add --dev vite-plugin-node-polyfills
+	// RunCommand("npm", "install")
+
+	// RunCommand("npm", "install", "near-api-js")
+	// RunCommand("npm", "install", "@near-wallet-selector/core")
+	// RunCommand("npm", "install", "@near-wallet-selector/modal-ui")
+
+	// RunCommand("npm", "install", "@near-wallet-selector/my-near-wallet")
+	// RunCommand("npm", "install", "@near-wallet-selector/sender")
+	// RunCommand("npm", "install", "@near-wallet-selector/nearfi")
+	// RunCommand("npm", "install", "@near-wallet-selector/here-wallet")
+	// RunCommand("npm", "install", "@near-wallet-selector/math-wallet")
+	// RunCommand("npm", "install", "@near-wallet-selector/nightly")
+	// RunCommand("npm", "install", "@near-wallet-selector/meteor-wallet")
+	// RunCommand("npm", "install", "@near-wallet-selector/ledger")
+	// RunCommand("npm", "install", "@near-wallet-selector/wallet-connect")
+	// RunCommand("npm", "install", "@near-wallet-selector/default-wallets")
+	// RunCommand("npm", "install", "@near-wallet-selector/coin98-wallet")
+	// RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
+
+	// Read the file content from templates/client/App.jsx
+	// Read the file content from templates/client/BlockchainDataInfo.jsx
+
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Error getting current directory: %v", err)
+	}
+
+	fmt.Println("Current working directory:", dir)
+
+	appJsxPath := "../../template/client/App.jsx"
+	appJsxFileContent, err := ioutil.ReadFile(appJsxPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	blockchainDataInfoJsxPath := "../../template/client/BlockchainDataInfo.jsx"
+	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(blockchainDataInfoJsxPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	mainJsxPath := "../../template/client/main.jsx"
+	mainJsxFileContent, err := ioutil.ReadFile(mainJsxPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	viteConfigPath := "../../template/client/vite.config.js"
+	viteConfigFileContent, err := ioutil.ReadFile(viteConfigPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+	fmt.Println("Writing main.jsx file...")
+	WriteToFile("./vite.config.js", string(viteConfigFileContent))
+
+	fmt.Println("Writing main.jsx file...")
+	WriteToFile("./src/main.jsx", string(mainJsxFileContent))
+
+	fmt.Println("Writing App.jsx file...")
+	WriteToFile("./src/App.jsx", string(appJsxFileContent))
+
+	fmt.Println("Writing BlockchainDataInfo.jsx file...")
+	WriteToFile("./src/BlockchainDataInfo.jsx", string(blockchainDataInfoJsxFileContent))
 
 	fmt.Println("React client setup complete!")
 }
@@ -631,7 +715,13 @@ ACCOUNT_ID = accountid
 	`
 	WriteToFile(".env", dotEnvFile)
 
+	fmt.Println("Installing dependencies...")
+
+	RunCommand("npm", "install", "near-api-js")
+	RunCommand("npm", "install", "near-lake-framework")
+
 	fmt.Println("Node.js server setup complete!")
+
 }
 
 // Project
