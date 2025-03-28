@@ -20,9 +20,33 @@ const (
 )
 
 const (
-	SmartContractProjectFolder = "contract"
-	ClientProjectFolder        = "client"
-	BackendProjectFolder       = "backend"
+	SmartContractProjectFolder                 = "contract"
+	SmartContractProjectIntegrationTestsFolder = "integration_tests"
+	ClientProjectFolder                        = "client"
+	BackendProjectFolder                       = "backend"
+)
+
+const (
+	appJsxPath     = "../../template/client/App.jsx.template"
+	appJsxFileName = "./src/App.jsx"
+
+	blockchainDataInfoJsxPath     = "../../template/client/BlockchainDataInfo.jsx.template"
+	blockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
+
+	mainJsxPath     = "../../template/client/main.jsx.template"
+	mainJsxFileName = "./src/main.jsx"
+
+	viteConfigPath     = "../../template/client/vite.config.js.template"
+	viteConfigFileName = "./vite.config.js"
+)
+
+const (
+	mainGoPath        = "../../template/contract/main.go.template"
+	mainGoFileName    = "./main.go"
+	mainRsPath        = "../../../template/contract/main.rs.template"
+	mainRsFileName    = "./src/main.rs"
+	cargoTomlPath     = "../../../template/contract/Cargo.toml.template"
+	cargoTomlFileName = "./Cargo.toml"
 )
 
 // Errors
@@ -179,185 +203,13 @@ func CreateSmartContractProject(moduleName string) {
 	}
 
 	fmt.Println("Creating main.go file...")
-	code :=
-		`
-package main
 
-import (
-	"encoding/hex"
-	"fmt"
-
-	"github.com/vlmoon99/near-sdk-go/env"
-	"github.com/vlmoon99/near-sdk-go/json"
-	"github.com/vlmoon99/near-sdk-go/types"
-)
-
-//go:export InitContract
-func InitContract() {
-	env.LogString("Init Smart Contract")
-}
-
-//go:export WriteData
-func WriteData() {
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
+	mainGoFileContent, err := ioutil.ReadFile(mainGoPath)
 	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
+		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	env.LogString("Contract input (JSON): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
-
-	if detectedType != "object" {
-		env.ContractValueReturn([]byte("Error : Incorrect type"))
-	}
-	parser := json.NewParser(input)
-
-	keyResult, err := parser.GetString("key")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect key"))
-	}
-
-	dataResult, err := parser.GetRawBytes("data")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect data"))
-	}
-
-	env.StorageWrite([]byte(keyResult), dataResult)
-	env.LogString("WriteData was successful")
-}
-
-//go:export ReadData
-func ReadData() {
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
-	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
-	}
-
-	env.LogString("Contract input (JSON): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
-
-	if detectedType != "object" {
-		env.ContractValueReturn([]byte("Error : Incorrect type"))
-	}
-	parser := json.NewParser(input)
-
-	keyResult, err := parser.GetString("key")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect key"))
-	}
-
-	data, err := env.StorageRead([]byte(keyResult))
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect read from the storage by that key"))
-	}
-	env.LogString("ReadData was successful")
-
-	env.ContractValueReturn(data)
-}
-
-//go:export AcceptPayment
-func AcceptPayment() {
-	attachedDeposit, err := env.GetAttachedDepoist()
-	if err != nil {
-		env.PanicStr("Failed to get attached deposit: " + err.Error())
-	}
-	env.LogString("Attachet Deposit :" + attachedDeposit.String())
-	promiseIdx := env.PromiseBatchCreate([]byte("neargocli.testnet"))
-	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
-	env.PromiseReturn(promiseIdx)
-	//neargocli.testnet
-	env.LogString("AcceptPayment")
-}
-
-//go:export ReadIncommingTxData
-func ReadIncommingTxData() {
-
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
-	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
-	}
-	env.LogString("Contract input (raw bytes): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
-
-	attachedDeposit, err := env.GetAttachedDepoist()
-	if err != nil {
-		env.PanicStr("Failed to get attached deposit: " + err.Error())
-	}
-	env.LogString(fmt.Sprintf("Attached deposit: %s", attachedDeposit.String()))
-
-	accountId, err := env.GetCurrentAccountId()
-	if err != nil || accountId == "" {
-		env.PanicStr("Failed to get current account ID: " + err.Error())
-	}
-	env.LogString("Current account ID: " + accountId)
-
-	signerId, err := env.GetSignerAccountID()
-	if err != nil || signerId == "" {
-		env.PanicStr("Failed to get signer account ID: " + err.Error())
-	}
-	env.LogString("Signer account ID: " + signerId)
-
-	signerPK, err := env.GetSignerAccountPK()
-	if err != nil || signerPK == nil {
-		env.PanicStr("Failed to get signer account PK: " + err.Error())
-	}
-	env.LogString("Signer account PK: " + hex.EncodeToString(signerPK))
-
-	predecessorId, err := env.GetPredecessorAccountID()
-	if err != nil || predecessorId == "" {
-		env.PanicStr("Failed to get predecessor account ID: " + err.Error())
-	}
-	env.LogString("Predecessor account ID: " + predecessorId)
-
-	blockHeight := env.GetCurrentBlockHeight()
-	env.LogString("Current block height: " + fmt.Sprintf("%d", blockHeight))
-
-	blockTimeMs := env.GetBlockTimeMs()
-	env.LogString("Block time in ms: " + fmt.Sprintf("%d", blockTimeMs))
-
-	epochHeight := env.GetEpochHeight()
-	env.LogString("Epoch height: " + fmt.Sprintf("%d", epochHeight))
-
-	storageUsage := env.GetStorageUsage()
-	env.LogString("Storage usage: " + fmt.Sprintf("%d", storageUsage))
-
-	accountBalance, err := env.GetAccountBalance()
-	if err != nil {
-		env.PanicStr("Failed to get account balance: " + err.Error())
-	}
-	env.LogString(fmt.Sprintf("Account balance: %s", accountBalance.String()))
-
-	lockedBalance, err := env.GetAccountLockedBalance()
-	if err != nil {
-		env.PanicStr("Failed to get account locked balance: " + err.Error())
-	}
-	env.LogString(fmt.Sprintf("Account locked balance: %s", lockedBalance.String()))
-
-	prepaidGas := env.GetPrepaidGas()
-	env.LogString(fmt.Sprintf("Prepaid gas: %ds", prepaidGas.Inner))
-
-	usedGas := env.GetUsedGas()
-	env.LogString(fmt.Sprintf("Used gas: %d", usedGas.Inner))
-
-	env.LogString("ReadIncommingTxData")
-}
-
-//go:export ReadBlockchainData
-func ReadBlockchainData() {
-	//neargocli.testnet
-	env.LogString("ReadBlockchainData")
-}
-
-		`
-
-	WriteToFile("main.go", code)
-
-	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
-		log.Fatal(ErrGoProjectMainGoFileIsMissing)
-	}
+	WriteToFile(mainGoFileName, string(mainGoFileContent))
 
 	CreateSmartContractIntegrationTests()
 	GoBackToThePrevDirectory()
@@ -365,141 +217,26 @@ func ReadBlockchainData() {
 
 func CreateSmartContractIntegrationTests() {
 	fmt.Println("Creating 'integration_tests' folder...")
-	CreateFolderAndNavigateThere("integration_tests")
+	CreateFolderAndNavigateThere(SmartContractProjectIntegrationTestsFolder)
+
+	mainRsFileContent, err := ioutil.ReadFile(mainRsPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	cargoTomlFileContent, err := ioutil.ReadFile(cargoTomlPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
 
 	fmt.Println("Initializing Cargo project...")
 	RunCommand("cargo", "init", "--bin")
 
-	cargoTomlContent := `
-[package]
-name = "integration_tests"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-anyhow = "1.0.93"
-json-patch = "3.0.1"
-near-workspaces = "0.15.0"
-serde = "1.0.215"
-serde_json = "1.0.133"
-tokio = "1.41.1"
-near-gas = "0.3.0"
-`
-
 	fmt.Println("Writing Cargo.toml file...")
-	WriteToFile("Cargo.toml", cargoTomlContent)
-
-	integrationTestCode := `
-use near_gas::NearGas;
-use near_workspaces::types::NearToken;
-use serde_json::json;
-
-async fn deploy_contract(
-    worker: &near_workspaces::Worker<near_workspaces::network::Sandbox>,
-) -> anyhow::Result<near_workspaces::Contract> {
-    const WASM_FILEPATH: &str = "../main.wasm";
-    let wasm = std::fs::read(WASM_FILEPATH)?;
-    let contract = worker.dev_deploy(&wasm).await?;
-    Ok(contract)
-}
-
-async fn call_integration_test_function(
-    contract: &near_workspaces::Contract,
-    function_name: &str,
-    args: serde_json::Value,
-    deposit: NearToken,
-    gas: NearGas,
-) -> anyhow::Result<()> {
-    let outcome = contract
-        .call(function_name)
-        .args_json(args)
-        .deposit(deposit)
-        .gas(gas)
-        .transact()
-        .await;
-
-    match outcome {
-        Ok(result) => {
-            println!("result.is_success: {:#?}", result.clone().is_success());
-            println!("Functions Logs: {:#?}", result.logs());
-            Ok(())
-        }
-        Err(err) => {
-            println!(
-                "{} result: Test failed with error: {:#?}",
-                function_name, err
-            );
-            Err(err.into())
-        }
-    }
-}
-
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let worker = sandbox().await?;
-    let contract = deploy_contract(&worker).await?;
-    let standard_deposit = NearToken::from_near(3);
-    let standard_gas = NearGas::from_tgas(300);
-    println!("Dev Account ID: {}", contract.id());
-
-    let success_results = vec![
-        call_integration_test_function(
-            &contract,
-            "InitContract",
-            json!({}),
-            standard_deposit,
-            standard_gas,
-        ).await,
-        call_integration_test_function(
-            &contract,
-            "WriteData",
-            json!({ "key": "testKey", "data": "testData" }),
-            standard_deposit,
-            standard_gas,
-        ).await,
-        call_integration_test_function(
-            &contract,
-            "ReadData",
-            json!({ "key": "testKey" }),
-            standard_deposit,
-            standard_gas,
-        ).await,
-        call_integration_test_function(
-            &contract,
-            "AcceptPayment",
-            json!({}),
-            standard_deposit,
-            standard_gas,
-        ).await,
-        call_integration_test_function(
-            &contract,
-            "ReadIncommingTxData",
-            json!({}),
-            standard_deposit,
-            standard_gas,
-        ).await,
-        call_integration_test_function(
-            &contract,
-            "ReadBlockchainData",
-            json!({}),
-            standard_deposit,
-            standard_gas,
-        ).await,
-    ];
-
-    for result in success_results {
-        if let Err(e) = result {
-            eprintln!("Error: {:?}", e);
-        }
-    }
-
-    Ok(())
-}
-	`
+	WriteToFile(cargoTomlFileName, string(cargoTomlFileContent))
 
 	fmt.Println("Writing boilerplate integration test code...")
-	WriteToFile("src/main.rs", integrationTestCode)
+	WriteToFile(mainRsFileName, string(mainRsFileContent))
 
 	fmt.Println("Integration tests setup completed successfully!")
 }
@@ -539,29 +276,6 @@ func CreateReactClientProject() {
 	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
 	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
 
-	// yarn add --dev vite-plugin-node-polyfills
-	// RunCommand("npm", "install")
-
-	// RunCommand("npm", "install", "near-api-js")
-	// RunCommand("npm", "install", "@near-wallet-selector/core")
-	// RunCommand("npm", "install", "@near-wallet-selector/modal-ui")
-
-	// RunCommand("npm", "install", "@near-wallet-selector/my-near-wallet")
-	// RunCommand("npm", "install", "@near-wallet-selector/sender")
-	// RunCommand("npm", "install", "@near-wallet-selector/nearfi")
-	// RunCommand("npm", "install", "@near-wallet-selector/here-wallet")
-	// RunCommand("npm", "install", "@near-wallet-selector/math-wallet")
-	// RunCommand("npm", "install", "@near-wallet-selector/nightly")
-	// RunCommand("npm", "install", "@near-wallet-selector/meteor-wallet")
-	// RunCommand("npm", "install", "@near-wallet-selector/ledger")
-	// RunCommand("npm", "install", "@near-wallet-selector/wallet-connect")
-	// RunCommand("npm", "install", "@near-wallet-selector/default-wallets")
-	// RunCommand("npm", "install", "@near-wallet-selector/coin98-wallet")
-	// RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
-
-	// Read the file content from templates/client/App.jsx
-	// Read the file content from templates/client/BlockchainDataInfo.jsx
-
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("Error getting current directory: %v", err)
@@ -569,40 +283,37 @@ func CreateReactClientProject() {
 
 	fmt.Println("Current working directory:", dir)
 
-	appJsxPath := "../../template/client/App.jsx"
 	appJsxFileContent, err := ioutil.ReadFile(appJsxPath)
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	blockchainDataInfoJsxPath := "../../template/client/BlockchainDataInfo.jsx"
 	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(blockchainDataInfoJsxPath)
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	mainJsxPath := "../../template/client/main.jsx"
 	mainJsxFileContent, err := ioutil.ReadFile(mainJsxPath)
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	viteConfigPath := "../../template/client/vite.config.js"
 	viteConfigFileContent, err := ioutil.ReadFile(viteConfigPath)
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
-	fmt.Println("Writing main.jsx file...")
-	WriteToFile("./vite.config.js", string(viteConfigFileContent))
 
 	fmt.Println("Writing main.jsx file...")
-	WriteToFile("./src/main.jsx", string(mainJsxFileContent))
+	WriteToFile(viteConfigFileName, string(viteConfigFileContent))
+
+	fmt.Println("Writing main.jsx file...")
+	WriteToFile(mainJsxFileName, string(mainJsxFileContent))
 
 	fmt.Println("Writing App.jsx file...")
-	WriteToFile("./src/App.jsx", string(appJsxFileContent))
+	WriteToFile(appJsxFileName, string(appJsxFileContent))
 
 	fmt.Println("Writing BlockchainDataInfo.jsx file...")
-	WriteToFile("./src/BlockchainDataInfo.jsx", string(blockchainDataInfoJsxFileContent))
+	WriteToFile(blockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
 
 	fmt.Println("React client setup complete!")
 }
@@ -614,6 +325,7 @@ func CreateNodeJsBackendProject() {
 	RunCommand("npm", "init", "-y")
 
 	fmt.Println("Creating simple server file...")
+
 	code := `
 //1.Indexer
 
