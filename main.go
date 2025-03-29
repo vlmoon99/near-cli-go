@@ -75,6 +75,8 @@ const (
 	ErrGoProjectModFileIsMissing         = "(INTERNAL_PROJECT_CONTRACT): Missing 'go.mod' file"
 	ErrGoProjectSumFileIsMissing         = "(INTERNAL_PROJECT_CONTRACT): Missing 'go.sum' file"
 	ErrGoProjectMainGoFileIsMissing      = "(INTERNAL_PROJECT_CONTRACT): Missing 'main.go' file"
+	ErrGettingCurrentDir                 = "(INTERNAL_PROJECT): Error getting current directory:"
+	ErrToReadFile                        = "(INTERNAL_PROJECT): Failed to read file"
 )
 
 //Utils
@@ -114,7 +116,7 @@ func TinygoRunWithRetryWrapper(command string, args []string, entityType string)
 }
 
 func RunCommand(name string, args ...string) ([]byte, error) {
-	fmt.Printf("Running command: %s %v\n", name, args)
+	// fmt.Printf("Running command: %s %v\n", name, args)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
@@ -165,10 +167,8 @@ func CreateFolderAndNavigateThere(name string) {
 
 func GoBackToThePrevDirectory() {
 	if err := os.Chdir(".."); err != nil {
-		log.Fatalf("%s: %v", ErrNavPrevDir, err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
-
-	fmt.Println("Changed directory to previous.")
 }
 
 //Utils
@@ -198,26 +198,21 @@ func HandleCreateProject(projectName, projectType, moduleName string) {
 
 func CreateSmartContractProject(moduleName string) {
 	CreateFolderAndNavigateThere(SmartContractProjectFolder)
-
-	fmt.Println("Initializing Go module...")
 	RunCommand("go", "mod", "init", moduleName)
 
 	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
 		log.Fatal(ErrGoProjectModFileIsMissing)
 	}
 
-	fmt.Println("Installing dependencies...")
 	RunCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.8")
 
 	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
 		log.Fatal(ErrGoProjectSumFileIsMissing)
 	}
 
-	fmt.Println("Creating main.go file...")
-
 	mainGoFileContent, err := ioutil.ReadFile(mainGoPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
 	WriteToFile(mainGoFileName, string(mainGoFileContent))
@@ -227,26 +222,22 @@ func CreateSmartContractProject(moduleName string) {
 }
 
 func CreateSmartContractIntegrationTests() {
-	fmt.Println("Creating 'integration_tests' folder...")
 	CreateFolderAndNavigateThere(SmartContractProjectIntegrationTestsFolder)
 
 	mainRsFileContent, err := ioutil.ReadFile(mainRsPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
 	cargoTomlFileContent, err := ioutil.ReadFile(cargoTomlPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
-	fmt.Println("Initializing Cargo project...")
 	RunCommand("cargo", "init", "--bin")
 
-	fmt.Println("Writing Cargo.toml file...")
 	WriteToFile(cargoTomlFileName, string(cargoTomlFileContent))
 
-	fmt.Println("Writing boilerplate integration test code...")
 	WriteToFile(mainRsFileName, string(mainRsFileContent))
 
 	fmt.Println("Integration tests setup completed successfully!")
@@ -287,43 +278,29 @@ func CreateReactClientProject() {
 	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
 	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
 
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("Error getting current directory: %v", err)
-	}
-
-	fmt.Println("Current working directory:", dir)
-
 	appJsxFileContent, err := ioutil.ReadFile(appJsxPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(blockchainDataInfoJsxPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	mainJsxFileContent, err := ioutil.ReadFile(mainJsxPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	viteConfigFileContent, err := ioutil.ReadFile(viteConfigPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	fmt.Println("Writing main.jsx file...")
 	WriteToFile(viteConfigFileName, string(viteConfigFileContent))
-
-	fmt.Println("Writing main.jsx file...")
 	WriteToFile(mainJsxFileName, string(mainJsxFileContent))
-
-	fmt.Println("Writing App.jsx file...")
 	WriteToFile(appJsxFileName, string(appJsxFileContent))
-
-	fmt.Println("Writing BlockchainDataInfo.jsx file...")
 	WriteToFile(blockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
 
 	fmt.Println("React client setup complete!")
@@ -331,49 +308,37 @@ func CreateReactClientProject() {
 
 func CreateNodeJsBackendProject() {
 	CreateFolderAndNavigateThere(BackendProjectFolder)
-	// yarn init -y
-	// yarn add express cors dotenv near-api-js near-lake-framework near-seed-phrase
-	// yarn add -D typescript ts-node @types/node @types/express
 	RunCommand("yarn", "init", "-y")
 	RunCommand("yarn", "add", "express", "cors", "dotenv", "near-api-js", "near-lake-framework", "near-seed-phrase")
 	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express")
 
-	dir, err := os.Getwd()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	fmt.Println("Current directory:", dir)
-
 	tsConfigJsonFileContent, err := ioutil.ReadFile(tsConfigJsonPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	WriteToFile(tsConfigJsonFileName, string(tsConfigJsonFileContent))
 
 	gitIgnoreFileContent, err := ioutil.ReadFile(gitIgnorePath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 	WriteToFile(gitIgnoreFileName, string(gitIgnoreFileContent))
 
 	dotEnvFileContent, err := ioutil.ReadFile(dotEnvPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 	WriteToFile(dotEnvFileName, string(dotEnvFileContent))
 
 	err = os.Mkdir("src", os.ModePerm)
 	if err != nil {
 		fmt.Println("Error creating folder:", err)
-	} else {
-		fmt.Println("Folder 'src' created successfully!")
 	}
 
 	indexTsFileContent, err := ioutil.ReadFile(indexTsPath)
 	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+		log.Fatalf("%s: %v", ErrToReadFile, err)
 	}
 	WriteToFile(indexTsFileName, string(indexTsFileContent))
 
@@ -436,7 +401,50 @@ func FullTest() {
 
 //Test
 
+// Check internal deps
+func checkDependencies(programs map[string]string) {
+	missing := []string{}
+
+	for program, helpMsg := range programs {
+		if !isInstalled(program) {
+			missing = append(missing, fmt.Sprintf("%s - %s", program, helpMsg))
+		}
+	}
+
+	if len(missing) > 0 {
+		fmt.Println("The following required programs are missing:")
+		for _, msg := range missing {
+			fmt.Println(" -", msg)
+		}
+		exitWithHelp()
+	} else {
+		fmt.Println("All necessary programs are installed.")
+	}
+}
+
+func isInstalled(command string) bool {
+	_, err := exec.LookPath(command)
+	return err == nil
+}
+
+func exitWithHelp() {
+	fmt.Println("Please install the missing programs and try again.")
+	exec.Command("exit", "1").Run()
+}
+
+// Check internal deps
+
 func main() {
+	programs := map[string]string{
+		"npm":    "Node.js package manager (Install from: https://nodejs.org/)",
+		"yarn":   "Alternative package manager for Node.js (Install from: https://yarnpkg.com/)",
+		"go":     "Go programming language (Install from: https://go.dev/dl/)",
+		"tinygo": "TinyGo compiler for WebAssembly (Install from: https://tinygo.org/getting-started/)",
+		"rustc":  "Rust compiler (Install from: https://www.rust-lang.org/tools/install)",
+		"near":   "NEAR CLI for blockchain interactions (Install from: https://github.com/near/near-cli-rs)",
+	}
+
+	checkDependencies(programs)
 	app := &cli.App{
 		Name:  "near-go",
 		Usage: "CLI tool for managing projects on Near Blockchain",
