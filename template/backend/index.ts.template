@@ -1,0 +1,41 @@
+import express from "express";
+import dotenv from "dotenv";
+import { connect, keyStores } from "near-api-js";
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json());
+
+// Function to get NEAR account balance
+const getNearAccountInfo = async (accountId: string) => {
+    const config = {
+        networkId: "testnet",
+        keyStore: new keyStores.InMemoryKeyStore(),
+        nodeUrl: "https://rpc.testnet.near.org",
+    };
+
+    const near = await connect(config);
+    const account = await near.account(accountId);
+    return account.getAccountBalance();
+};
+
+// API route
+app.get("/near/account/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const data = await getNearAccountInfo(id);
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: "Error" });
+    }
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});

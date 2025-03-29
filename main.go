@@ -49,6 +49,17 @@ const (
 	cargoTomlFileName = "./Cargo.toml"
 )
 
+const (
+	tsConfigJsonPath     = "../../template/backend/tsconfig.json.template"
+	tsConfigJsonFileName = "./tsconfig.json"
+	indexTsPath          = "../../template/backend/index.ts.template"
+	indexTsFileName      = "./src/index.ts"
+	gitIgnorePath        = "../../template/backend/gitignore.tempalte"
+	gitIgnoreFileName    = "./.gitignore"
+	dotEnvPath           = "../../template/backend/env.template"
+	dotEnvFileName       = "./.env"
+)
+
 // Errors
 
 const (
@@ -320,117 +331,51 @@ func CreateReactClientProject() {
 
 func CreateNodeJsBackendProject() {
 	CreateFolderAndNavigateThere(BackendProjectFolder)
+	// yarn init -y
+	// yarn add express cors dotenv near-api-js near-lake-framework near-seed-phrase
+	// yarn add -D typescript ts-node @types/node @types/express
+	RunCommand("yarn", "init", "-y")
+	RunCommand("yarn", "add", "express", "cors", "dotenv", "near-api-js", "near-lake-framework", "near-seed-phrase")
+	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express")
 
-	fmt.Println("Initializing Node.js project...")
-	RunCommand("npm", "init", "-y")
+	dir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Println("Current directory:", dir)
 
-	fmt.Println("Creating simple server file...")
+	tsConfigJsonFileContent, err := ioutil.ReadFile(tsConfigJsonPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
 
-	code := `
-//1.Indexer
+	WriteToFile(tsConfigJsonFileName, string(tsConfigJsonFileContent))
 
-// import { startStream, types } from "near-lake-framework";
+	gitIgnoreFileContent, err := ioutil.ReadFile(gitIgnorePath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+	WriteToFile(gitIgnoreFileName, string(gitIgnoreFileContent))
 
-// const lakeConfig = {
-//   s3BucketName: "near-lake-data-mainnet",
-//   s3RegionName: "eu-central-1",
-//   startBlockHeight: 63804051,
-// };
+	dotEnvFileContent, err := ioutil.ReadFile(dotEnvPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+	WriteToFile(dotEnvFileName, string(dotEnvFileContent))
 
-// async function handleStreamerMessage(
-//   streamerMessage
-// ) {
-//   const relevantOutcomes =
-//     streamerMessage.shards
-//       .flatMap((shard) => shard.receiptExecutionOutcomes)
-//       .map((outcome) => ({
-//         receipt: {
-//           id: outcome.receipt.receiptId,
-//           receiverId: outcome.receipt.receiverId,
-//         },
-//         nearSocialMethodCallData: mapOutcomeToNearSocialNotifyObject(outcome),
-//       }))
-//       .filter((relevantOutcome) => {
-//         return (
-//           relevantOutcome.receipt.receiverId == "your_account_id_smart_contract" 
-//         );
-//       });
-// }
+	err = os.Mkdir("src", os.ModePerm)
+	if err != nil {
+		fmt.Println("Error creating folder:", err)
+	} else {
+		fmt.Println("Folder 'src' created successfully!")
+	}
 
-// (async () => {
-//   await startStream(lakeConfig, handleStreamerMessage);
-// })();
-
-
-//2.Backend for transaction processing and other blockchain operation
-
-// import { connect, keyStores, KeyPair, utils } from "near-api-js";
-// import dotenv from "dotenv";
-
-// dotenv.config({ path: "../.env" });
-// const privateKey = process.env.PRIVATE_KEY;
-// const accountId = process.env.ACCOUNT_ID;
-
-// const myKeyStore = new keyStores.InMemoryKeyStore();
-// const keyPair = KeyPair.fromString(privateKey);
-// await myKeyStore.setKey("testnet", accountId, keyPair);
-
-// const connectionConfig = {
-//   networkId: "testnet",
-//   keyStore: myKeyStore,
-//   nodeUrl: "https://rpc.testnet.near.org",
-// };
-// const nearConnection = await connect(connectionConfig);
-
-// const account = await nearConnection.account(accountId);
-
-
-// Create all operations on the blockchain
-	`
-	fmt.Println("React client setup complete!")
-	WriteToFile("index.js", code)
-
-	gitIgnoreFile :=
-		`
-{
-  "type": "module",
-  "name": "backend",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "near-lake-framework": "^2.0.0",
-    "borsh": "2.0.0",
-    "dotenv": "^16.4.7",
-    "js-sha256": "^0.11.0",
-    "near-api-js": "^4.0.4",
-    "near-seed-phrase": "^0.2.1"
-  }
-}
-	
-`
-	WriteToFile(".gitignore", gitIgnoreFile)
-
-	dotEnvFile := `
-
-AWS_ACCESS_KEY_ID = YOUR_AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY = YOUR_AWS_SECRET_ACCESS_KEY
-PRIVATE_KEY = privatekey
-ACCOUNT_ID = accountid
-
-	`
-	WriteToFile(".env", dotEnvFile)
-
-	fmt.Println("Installing dependencies...")
-
-	RunCommand("npm", "install", "near-api-js")
-	RunCommand("npm", "install", "near-lake-framework")
+	indexTsFileContent, err := ioutil.ReadFile(indexTsPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+	WriteToFile(indexTsFileName, string(indexTsFileContent))
 
 	fmt.Println("Node.js server setup complete!")
 
