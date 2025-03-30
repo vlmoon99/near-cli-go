@@ -177,20 +177,15 @@ func GoBackToThePrevDirectory() {
 
 func HandleCreateProject(projectName, projectType, moduleName string) {
 	if projectType == SmartContractTypeProject {
-		fmt.Println("Creating project directory...")
 		CreateFolderAndNavigateThere(projectName)
 		CreateSmartContractProject(moduleName)
-		fmt.Println("Project created successfully!")
-
 	} else if projectType == FullStackTypeProjectReactNodeJs {
-		fmt.Println("Creating project directory...")
 		CreateFolderAndNavigateThere(projectName)
 		CreateSmartContractProject(moduleName)
 		GoBackToThePrevDirectory()
 		CreateReactClientProject()
 		GoBackToThePrevDirectory()
 		CreateNodeJsBackendProject()
-		fmt.Println("Project created successfully!")
 	} else {
 		log.Fatal(ErrIncorrectType)
 	}
@@ -246,8 +241,6 @@ func CreateSmartContractIntegrationTests() {
 func CreateReactClientProject() {
 	CreateFolderAndNavigateThere(ClientProjectFolder)
 
-	fmt.Println("Initializing React project with Vite...")
-
 	command := "echo 'y' | npx create-vite@latest . --template react"
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stdout = os.Stdout
@@ -257,7 +250,6 @@ func CreateReactClientProject() {
 		log.Fatalf("%s: %v", ErrInitReactVite, err)
 	}
 
-	fmt.Println("Installing dependencies...")
 	RunCommand("yarn", "install")
 
 	RunCommand("yarn", "add", "near-api-js")
