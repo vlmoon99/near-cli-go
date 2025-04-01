@@ -7,7 +7,10 @@ async fn deploy_contract(
 ) -> anyhow::Result<near_workspaces::Contract> {
     const WASM_FILEPATH: &str = "../main.wasm";
     let wasm = std::fs::read(WASM_FILEPATH)?;
-    let contract = worker.dev_deploy(&wasm).await?;
+    let contract = worker
+    .dev_deploy(&wasm)
+    .await?;
+
     Ok(contract)
 }
 
@@ -28,24 +31,23 @@ async fn call_integration_test_function(
 
     match outcome {
         Ok(result) => {
-            println!("result.is_success: {:#?}", result.clone().is_success());
-            println!("Functions Logs: {:#?}", result.logs());
+            println!("✅ Function '{}' executed successfully.", function_name);
+            println!("Success: {:#?}", result.clone().is_success());
+            println!("Logs: {:#?}", result.clone().logs());
             Ok(())
         }
         Err(err) => {
-            println!(
-                "{} result: Test failed with error: {:#?}",
-                function_name, err
-            );
+            println!("❌ Test failed for '{}' with error: {:#?}", function_name, err);
             Err(err.into())
         }
     }
 }
 
 
+
 #[tokio::main]
-async fn main() -> Result<()> {
-    let worker = sandbox().await?;
+async fn main() -> anyhow::Result<()>  {
+    let worker = near_workspaces::sandbox().await?;
     let contract = deploy_contract(&worker).await?;
     let standard_deposit = NearToken::from_near(3);
     let standard_gas = NearGas::from_tgas(300);
@@ -104,4 +106,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-	

@@ -84,7 +84,6 @@ func AcceptPayment() {
 	env.LogString("Attachet Deposit :" + attachedDeposit.String())
 	promiseIdx := env.PromiseBatchCreate([]byte("neargocli.testnet"))
 	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
-	env.PromiseReturn(promiseIdx)
 	//neargocli.testnet
 	env.LogString("AcceptPayment")
 }
