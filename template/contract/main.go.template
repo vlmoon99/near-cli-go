@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -13,6 +12,7 @@ import (
 //go:export InitContract
 func InitContract() {
 	env.LogString("Init Smart Contract")
+	env.ContractValueReturn([]byte("Init Smart Contract"))
 }
 
 //go:export WriteData
@@ -41,8 +41,18 @@ func WriteData() {
 		env.ContractValueReturn([]byte("Error : Incorrect data"))
 	}
 
-	env.StorageWrite([]byte(keyResult), dataResult)
-	env.LogString("WriteData was successful")
+	resultStorageWrite, err := env.StorageWrite([]byte(keyResult), dataResult)
+	if err != nil {
+		env.ContractValueReturn([]byte("Error : " + err.Error()))
+	}
+
+	if resultStorageWrite {
+		env.LogString("env.StorageWrite returned true")
+	} else {
+		env.LogString("env.StorageWrite returned false")
+	}
+
+	env.ContractValueReturn([]byte("WriteData was successful"))
 }
 
 //go:export ReadData
@@ -57,7 +67,7 @@ func ReadData() {
 	env.LogString("Detected input type: " + detectedType)
 
 	if detectedType != "object" {
-		env.ContractValueReturn([]byte("Error : Incorrect type"))
+		env.ContractValueReturn([]byte("Error : Incorrect type" + "detected type is " + detectedType))
 	}
 	parser := json.NewParser(input)
 
@@ -82,10 +92,11 @@ func AcceptPayment() {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
 	env.LogString("Attachet Deposit :" + attachedDeposit.String())
-	promiseIdx := env.PromiseBatchCreate([]byte("neargocli.testnet"))
+	promiseIdx := env.PromiseBatchCreate([]byte("neargoclitest.testnet"))
 	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
 	//neargocli.testnet
-	env.LogString("AcceptPayment")
+	env.ContractValueReturn([]byte("AcceptPayment"))
+
 }
 
 //go:export ReadIncommingTxData
@@ -159,13 +170,11 @@ func ReadIncommingTxData() {
 	usedGas := env.GetUsedGas()
 	env.LogString(fmt.Sprintf("Used gas: %d", usedGas.Inner))
 
-	env.LogString("ReadIncommingTxData")
+	env.ContractValueReturn([]byte("ReadIncommingTxData"))
 }
 
 //go:export ReadBlockchainData
 func ReadBlockchainData() {
 	//neargocli.testnet
-	env.LogString("ReadBlockchainData")
+	env.ContractValueReturn([]byte("ReadBlockchainData"))
 }
-
-		
