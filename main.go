@@ -33,6 +33,9 @@ const (
 	blockchainDataInfoJsxPath     = "../../template/client/BlockchainDataInfo.jsx.template"
 	blockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
 
+	smartContractOperationsJsxPath     = "../../template/client/SmartContractOperations.jsx.template"
+	smartContractOperationsJsxFileName = "./src/SmartContractOperations.jsx"
+
 	mainJsxPath     = "../../template/client/main.jsx.template"
 	mainJsxFileName = "./src/main.jsx"
 
@@ -280,6 +283,11 @@ func CreateReactClientProject() {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
+	smartContractOperationsJsxFileContent, err := ioutil.ReadFile(smartContractOperationsJsxPath)
+	if err != nil {
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
+	}
+
 	mainJsxFileContent, err := ioutil.ReadFile(mainJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
@@ -294,6 +302,7 @@ func CreateReactClientProject() {
 	WriteToFile(mainJsxFileName, string(mainJsxFileContent))
 	WriteToFile(appJsxFileName, string(appJsxFileContent))
 	WriteToFile(blockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
+	WriteToFile(smartContractOperationsJsxFileName, string(smartContractOperationsJsxFileContent))
 
 	fmt.Println("React client setup complete!")
 }
