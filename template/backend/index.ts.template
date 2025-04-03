@@ -1,41 +1,68 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import dotenv from "dotenv";
-import { connect, keyStores } from "near-api-js";
+import { connect, KeyPair, keyStores, utils } from "near-api-js";
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
 
-// Function to get NEAR account balance
-const getNearAccountInfo = async (accountId: string) => {
-    const config = {
-        networkId: "testnet",
-        keyStore: new keyStores.InMemoryKeyStore(),
-        nodeUrl: "https://rpc.testnet.near.org",
-    };
+const CONTRACT_ID = "neargocli.testnet";
+const ACCOUNT_ID = process.env.NEAR_ACCOUNT_ID as string;
+const PRIVATE_KEY = process.env.NEAR_PRIVATE_KEY as `ed25519:${string}` | `secp256k1:${string}`;
 
-    const near = await connect(config);
-    const account = await near.account(accountId);
-    return account.getAccountBalance();
+const keyStore = new keyStores.InMemoryKeyStore();
+const keyPair = KeyPair.fromString(PRIVATE_KEY);
+keyStore.setKey("testnet", ACCOUNT_ID, keyPair);
+
+const getNearConnection = async () => {
+    return connect({
+        networkId: "testnet",
+        keyStore: keyStore,
+        nodeUrl: "https://rpc.testnet.near.org",
+    });
 };
 
-// API route
-app.get("/near/account/:id", async (req, res) => {
-    const { id } = req.params;
+const executeFunction = async (
+    methodName: string,
+    args = {},
+    deposit = "0",
+    gas = "300000000000000"
+) => {
     try {
-        const data = await getNearAccountInfo(id);
-        res.json(data);
+        const near = await getNearConnection();
+        const account = await near.account(ACCOUNT_ID);
+
+        const result = await account.functionCall({
+            contractId: CONTRACT_ID,
+            methodName,
+            args,
+            gas: BigInt(gas),
+            attachedDeposit: BigInt(utils.format.parseNearAmount(deposit) || "0"),
+        });
+
+        return result.transaction.hash;
     } catch (error) {
-        res.status(500).json({ error: "Error" });
+        console.error("Transaction Error:", error);
+        throw new Error("Transaction execution failed");
+    }
+};
+
+app.post("/near/contract/:method", async (req: Request, res: Response) => {
+    const { method } = req.params;
+    const { args, deposit, gas } = req.body;
+
+    try {
+        const transactionHash = await executeFunction(method, args, deposit, gas);
+        res.json({ success: true, transactionHash });
+    } catch (error) {
+        console.error("Error executing transaction:", error);
+        res.status(500).json({ error: "Transaction execution failed" });
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

@@ -12,8 +12,6 @@ import (
 	"github.com/urfave/cli"
 )
 
-//Constants
-
 const (
 	SmartContractTypeProject        = "smart-contract"
 	FullStackTypeProjectReactNodeJs = "full-stack-react-nodejs"
@@ -24,46 +22,56 @@ const (
 	SmartContractProjectIntegrationTestsFolder = "integration_tests"
 	ClientProjectFolder                        = "client"
 	BackendProjectFolder                       = "backend"
+	ContractListnerProjectFolder               = "contract_listener"
 )
 
 const (
-	appJsxPath     = "../../template/client/App.jsx.template"
-	appJsxFileName = "./src/App.jsx"
+	ClientAppJsxPath     = "../../template/client/App.jsx.template"
+	ClientAppJsxFileName = "./src/App.jsx"
 
-	blockchainDataInfoJsxPath     = "../../template/client/BlockchainDataInfo.jsx.template"
-	blockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
+	ClientBlockchainDataInfoJsxPath     = "../../template/client/BlockchainDataInfo.jsx.template"
+	ClientBlockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
 
-	smartContractOperationsJsxPath     = "../../template/client/SmartContractOperations.jsx.template"
-	smartContractOperationsJsxFileName = "./src/SmartContractOperations.jsx"
+	ClientSmartContractOperationsJsxPath     = "../../template/client/SmartContractOperations.jsx.template"
+	ClientSmartContractOperationsJsxFileName = "./src/SmartContractOperations.jsx"
 
-	mainJsxPath     = "../../template/client/main.jsx.template"
-	mainJsxFileName = "./src/main.jsx"
+	ClientMainJsxPath     = "../../template/client/main.jsx.template"
+	ClientMainJsxFileName = "./src/main.jsx"
 
-	viteConfigPath     = "../../template/client/vite.config.js.template"
-	viteConfigFileName = "./vite.config.js"
+	ClientViteConfigPath     = "../../template/client/vite.config.js.template"
+	ClientViteConfigFileName = "./vite.config.js"
 )
 
 const (
-	mainGoPath        = "../../template/contract/main.go.template"
-	mainGoFileName    = "./main.go"
-	mainRsPath        = "../../../template/contract/main.rs.template"
-	mainRsFileName    = "./src/main.rs"
-	cargoTomlPath     = "../../../template/contract/Cargo.toml.template"
-	cargoTomlFileName = "./Cargo.toml"
+	ContractMainGoPath        = "../../template/contract/main.go.template"
+	ContractMainGoFileName    = "./main.go"
+	ContractMainRsPath        = "../../../template/contract/main.rs.template"
+	ContractMainRsFileName    = "./src/main.rs"
+	ContractCargoTomlPath     = "../../../template/contract/Cargo.toml.template"
+	ContractCargoTomlFileName = "./Cargo.toml"
 )
 
 const (
-	tsConfigJsonPath     = "../../template/backend/tsconfig.json.template"
-	tsConfigJsonFileName = "./tsconfig.json"
-	indexTsPath          = "../../template/backend/index.ts.template"
-	indexTsFileName      = "./src/index.ts"
-	gitIgnorePath        = "../../template/backend/gitignore.tempalte"
-	gitIgnoreFileName    = "./.gitignore"
-	dotEnvPath           = "../../template/backend/env.template"
-	dotEnvFileName       = "./.env"
+	BackendTsConfigJsonPath     = "../../template/backend/tsconfig.json.template"
+	BackendTsConfigJsonFileName = "./tsconfig.json"
+	BackendIndexTsPath          = "../../template/backend/index.ts.template"
+	BackendIndexTsFileName      = "./src/index.ts"
+	BackendGitIgnorePath        = "../../template/backend/gitignore.tempalte"
+	BackendGitIgnoreFileName    = "./.gitignore"
+	BackendDotEnvPath           = "../../template/backend/env.template"
+	BackendDotEnvFileName       = "./.env"
 )
 
-// Errors
+const (
+	ContractListnerTsConfigJsonPath     = "../../template/contract_listner/tsconfig.json.template"
+	ContractListnerTsConfigJsonFileName = "./tsconfig.json"
+	ContractListnerIndexTsPath          = "../../template/contract_listner/index.ts.template"
+	ContractListnerIndexTsFileName      = "./src/index.ts"
+	ContractListnerGitIgnorePath        = "../../template/contract_listner/gitignore.tempalte"
+	ContractListnerGitIgnoreFileName    = "./.gitignore"
+	ContractListnerDotEnvPath           = "../../template/contract_listner/env.template"
+	ContractListnerDotEnvFileName       = "./.env"
+)
 
 const (
 	ErrProvidedNetwork                   = "(USER_INPUT_ERROR): Missing 'network'"
@@ -81,8 +89,6 @@ const (
 	ErrGettingCurrentDir                 = "(INTERNAL_PROJECT): Error getting current directory:"
 	ErrToReadFile                        = "(INTERNAL_PROJECT): Failed to read file"
 )
-
-//Utils
 
 func NearCLIWrapper(args ...string) error {
 	cmd := exec.Command("near", args...)
@@ -189,6 +195,8 @@ func HandleCreateProject(projectName, projectType, moduleName string) {
 		CreateReactClientProject()
 		GoBackToThePrevDirectory()
 		CreateNodeJsBackendProject()
+		GoBackToThePrevDirectory()
+		CreateContractListnerProject()
 	} else {
 		log.Fatal(ErrIncorrectType)
 	}
@@ -208,12 +216,12 @@ func CreateSmartContractProject(moduleName string) {
 		log.Fatal(ErrGoProjectSumFileIsMissing)
 	}
 
-	mainGoFileContent, err := ioutil.ReadFile(mainGoPath)
+	mainGoFileContent, err := ioutil.ReadFile(ContractMainGoPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
-	WriteToFile(mainGoFileName, string(mainGoFileContent))
+	WriteToFile(ContractMainGoFileName, string(mainGoFileContent))
 
 	CreateSmartContractIntegrationTests()
 	GoBackToThePrevDirectory()
@@ -222,21 +230,21 @@ func CreateSmartContractProject(moduleName string) {
 func CreateSmartContractIntegrationTests() {
 	CreateFolderAndNavigateThere(SmartContractProjectIntegrationTestsFolder)
 
-	mainRsFileContent, err := ioutil.ReadFile(mainRsPath)
+	mainRsFileContent, err := ioutil.ReadFile(ContractMainRsPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
-	cargoTomlFileContent, err := ioutil.ReadFile(cargoTomlPath)
+	cargoTomlFileContent, err := ioutil.ReadFile(ContractCargoTomlPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
 	RunCommand("cargo", "init", "--bin")
 
-	WriteToFile(cargoTomlFileName, string(cargoTomlFileContent))
+	WriteToFile(ContractCargoTomlFileName, string(cargoTomlFileContent))
 
-	WriteToFile(mainRsFileName, string(mainRsFileContent))
+	WriteToFile(ContractMainRsFileName, string(mainRsFileContent))
 
 	fmt.Println("Integration tests setup completed successfully!")
 }
@@ -273,36 +281,36 @@ func CreateReactClientProject() {
 	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
 	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
 
-	appJsxFileContent, err := ioutil.ReadFile(appJsxPath)
+	appJsxFileContent, err := ioutil.ReadFile(ClientAppJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(blockchainDataInfoJsxPath)
+	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(ClientBlockchainDataInfoJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	smartContractOperationsJsxFileContent, err := ioutil.ReadFile(smartContractOperationsJsxPath)
+	smartContractOperationsJsxFileContent, err := ioutil.ReadFile(ClientSmartContractOperationsJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	mainJsxFileContent, err := ioutil.ReadFile(mainJsxPath)
+	mainJsxFileContent, err := ioutil.ReadFile(ClientMainJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	viteConfigFileContent, err := ioutil.ReadFile(viteConfigPath)
+	viteConfigFileContent, err := ioutil.ReadFile(ClientViteConfigPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	WriteToFile(viteConfigFileName, string(viteConfigFileContent))
-	WriteToFile(mainJsxFileName, string(mainJsxFileContent))
-	WriteToFile(appJsxFileName, string(appJsxFileContent))
-	WriteToFile(blockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
-	WriteToFile(smartContractOperationsJsxFileName, string(smartContractOperationsJsxFileContent))
+	WriteToFile(ClientViteConfigFileName, string(viteConfigFileContent))
+	WriteToFile(ClientMainJsxFileName, string(mainJsxFileContent))
+	WriteToFile(ClientAppJsxFileName, string(appJsxFileContent))
+	WriteToFile(ClientBlockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
+	WriteToFile(ClientSmartContractOperationsJsxFileName, string(smartContractOperationsJsxFileContent))
 
 	fmt.Println("React client setup complete!")
 }
@@ -313,37 +321,77 @@ func CreateNodeJsBackendProject() {
 	RunCommand("yarn", "add", "express", "cors", "dotenv", "near-api-js", "near-lake-framework", "near-seed-phrase")
 	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express")
 
-	tsConfigJsonFileContent, err := ioutil.ReadFile(tsConfigJsonPath)
+	tsConfigJsonFileContent, err := ioutil.ReadFile(BackendTsConfigJsonPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	WriteToFile(tsConfigJsonFileName, string(tsConfigJsonFileContent))
+	WriteToFile(BackendTsConfigJsonFileName, string(tsConfigJsonFileContent))
 
-	gitIgnoreFileContent, err := ioutil.ReadFile(gitIgnorePath)
+	gitIgnoreFileContent, err := ioutil.ReadFile(BackendGitIgnorePath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
-	WriteToFile(gitIgnoreFileName, string(gitIgnoreFileContent))
+	WriteToFile(BackendGitIgnoreFileName, string(gitIgnoreFileContent))
 
-	dotEnvFileContent, err := ioutil.ReadFile(dotEnvPath)
+	dotEnvFileContent, err := ioutil.ReadFile(BackendDotEnvPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
-	WriteToFile(dotEnvFileName, string(dotEnvFileContent))
+	WriteToFile(BackendDotEnvFileName, string(dotEnvFileContent))
 
 	err = os.Mkdir("src", os.ModePerm)
 	if err != nil {
 		fmt.Println("Error creating folder:", err)
 	}
 
-	indexTsFileContent, err := ioutil.ReadFile(indexTsPath)
+	indexTsFileContent, err := ioutil.ReadFile(BackendIndexTsPath)
 	if err != nil {
 		log.Fatalf("%s: %v", ErrToReadFile, err)
 	}
-	WriteToFile(indexTsFileName, string(indexTsFileContent))
+	WriteToFile(BackendIndexTsFileName, string(indexTsFileContent))
 
 	fmt.Println("Node.js server setup complete!")
+
+}
+
+func CreateContractListnerProject() {
+	CreateFolderAndNavigateThere(ContractListnerProjectFolder)
+	RunCommand("yarn", "init", "-y")
+	RunCommand("yarn", "add", "express", "cors", "dotenv")
+	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express", "@near-lake/framework")
+
+	tsConfigJsonFileContent, err := ioutil.ReadFile(ContractListnerTsConfigJsonPath)
+	if err != nil {
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
+	}
+
+	WriteToFile(ContractListnerTsConfigJsonFileName, string(tsConfigJsonFileContent))
+
+	gitIgnoreFileContent, err := ioutil.ReadFile(ContractListnerGitIgnorePath)
+	if err != nil {
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
+	}
+	WriteToFile(ContractListnerGitIgnoreFileName, string(gitIgnoreFileContent))
+
+	dotEnvFileContent, err := ioutil.ReadFile(ContractListnerDotEnvPath)
+	if err != nil {
+		log.Fatalf("%s %v", ErrNavPrevDir, err)
+	}
+	WriteToFile(ContractListnerDotEnvFileName, string(dotEnvFileContent))
+
+	err = os.Mkdir("src", os.ModePerm)
+	if err != nil {
+		fmt.Println("Error creating folder:", err)
+	}
+
+	indexTsFileContent, err := ioutil.ReadFile(ContractListnerIndexTsPath)
+	if err != nil {
+		log.Fatalf("%s: %v", ErrToReadFile, err)
+	}
+	WriteToFile(ContractListnerIndexTsFileName, string(indexTsFileContent))
+
+	fmt.Println("Node.js contract listener setup complete!")
 
 }
 

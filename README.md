@@ -151,4 +151,3 @@ COMMANDS:
 GLOBAL OPTIONS:
    --help, -h  show help
 ```
-
