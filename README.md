@@ -1,17 +1,19 @@
-### 🚨 **IMPORTANT PREREQUISITES** 🚨
+### 🚨 **IMPORTANT PREREQUISITES** 🚨  
 
-**Before using the `near-go` CLI, make sure you have the following tools installed on your PC:**  
+### Before using the `near-go` CLI, ensure you have the following tools installed on your PC:  
 
-1. **[Node.js and npm](https://nodejs.org/)** - **_Required for managing JavaScript dependencies._**  
-2. **[Yarn](https://yarnpkg.com/getting-started/install)** - **_Alternative package manager for JavaScript dependencies._**  
-3. **[Go](https://go.dev/doc/install)** - **_Required for Go-based development._**  
-4. **[Rust](https://www.rust-lang.org/tools/install)** - **_Required for Rust-based development and integration testing._**  
-5. **[near-cli-rs](https://github.com/near/near-cli-rs)** - **_Required for interacting with the NEAR network._**  
-6. **[TinyGo](https://tinygo.org/getting-started/install/)** - **_Required for building smart contracts._**  
-7. **[Near CLI](https://github.com/near/near-cli)** - **_Required for interacting with the NEAR network._**  
+### ⚠️ If any of these tools are missing, you won't be able to use the full functionality of the `near-go` CLI.  
+### This CLI acts as a proxy to `near-cli-rs` and `TinyGo`.  
 
-### ⚠️ **Ensure these tools are installed to avoid errors!** ⚠️
+1. **[Node.js and npm](https://nodejs.org/)** – _Required for managing JavaScript dependencies._  
+2. **[Yarn](https://yarnpkg.com/getting-started/install)** – _An alternative package manager for JavaScript dependencies._  
+3. **[Go](https://go.dev/doc/install)** – _Required for Go-based development._  
+4. **[Rust](https://www.rust-lang.org/tools/install)** – _Required for Rust-based development and integration testing._  
+5. **[near-cli-rs](https://github.com/near/near-cli-rs)** – _Required for interacting with the NEAR network._  
+6. **[TinyGo](https://tinygo.org/getting-started/install/)** – _Required for building smart contracts._  
+7. **[Near CLI](https://github.com/near/near-cli)** – _Required for interacting with the NEAR network._  
 
+### ⚠️ **Make sure these tools are installed to avoid errors!** ⚠️  
 
 # NEAR CLI Go
 
@@ -78,56 +80,6 @@ Once the CLI is installed, you can use the following commands to manage projects
    ```
 
    Displays a list of available commands or detailed help for a specific command.
-
-## Example Workflow
-
-1. **Verify installation:**
-
-   ```bash
-   go run main.go
-   ```
-
-   If all necessary programs are installed, the CLI should display available commands.
-
-2. **Create a new project:**
-
-   ```bash
-   near-go create -p my_project -m github.com/myGithubName/myProject
-   ```
-
-3. **Build the smart contract:**
-
-   ```bash
-   near-go build
-   ```
-
-4. **Manage blockchain accounts:**
-
-   ```bash
-   near-go account create-dev
-   ```
-
-   This command creates a new dev account on the testnet.
-
-5. **Deploy the smart contract to testnet:**
-
-   ```bash
-   near-go deploy
-   ```
-
-6. **Run smart contract tests:**
-
-   ```bash
-   near-go test
-   ```
-
-7. **Deploy the smart contract to mainnet (optional):**
-
-   ```bash
-   near-go deploy --prod
-   ```
-
-   This step deploys your smart contract to the mainnet, using the mainnet account you imported earlier.
 
 ### CLI Help Output Example
 
