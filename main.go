@@ -354,6 +354,8 @@ func CreateNodeJsBackendProject() {
 	}
 	WriteToFile(BackendIndexTsFileName, string(indexTsFileContent))
 
+	RunCommand("npm", "i")
+
 	fmt.Println("Node.js server setup complete!")
 
 }
@@ -393,6 +395,8 @@ func CreateContractListnerProject() {
 		log.Fatalf("%s: %v", ErrToReadFile, err)
 	}
 	WriteToFile(ContractListnerIndexTsFileName, string(indexTsFileContent))
+
+	RunCommand("npm", "i")
 
 	fmt.Println("Node.js contract listener setup complete!")
 
