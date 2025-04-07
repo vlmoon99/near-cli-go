@@ -2,15 +2,18 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 
 	"github.com/urfave/cli"
 )
+
+//go:embed template/**/*
+var templates embed.FS
 
 const (
 	SmartContractTypeProject        = "smart-contract"
@@ -26,50 +29,50 @@ const (
 )
 
 const (
-	ClientAppJsxPath     = "../../template/client/App.jsx.template"
+	ClientAppJsxPath     = "template/client/App.jsx.template"
 	ClientAppJsxFileName = "./src/App.jsx"
 
-	ClientBlockchainDataInfoJsxPath     = "../../template/client/BlockchainDataInfo.jsx.template"
+	ClientBlockchainDataInfoJsxPath     = "template/client/BlockchainDataInfo.jsx.template"
 	ClientBlockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
 
-	ClientSmartContractOperationsJsxPath     = "../../template/client/SmartContractOperations.jsx.template"
+	ClientSmartContractOperationsJsxPath     = "template/client/SmartContractOperations.jsx.template"
 	ClientSmartContractOperationsJsxFileName = "./src/SmartContractOperations.jsx"
 
-	ClientMainJsxPath     = "../../template/client/main.jsx.template"
+	ClientMainJsxPath     = "template/client/main.jsx.template"
 	ClientMainJsxFileName = "./src/main.jsx"
 
-	ClientViteConfigPath     = "../../template/client/vite.config.js.template"
+	ClientViteConfigPath     = "template/client/vite.config.js.template"
 	ClientViteConfigFileName = "./vite.config.js"
 )
 
 const (
-	ContractMainGoPath        = "../../template/contract/main.go.template"
+	ContractMainGoPath        = "template/contract/main.go.template"
 	ContractMainGoFileName    = "./main.go"
-	ContractMainRsPath        = "../../../template/contract/main.rs.template"
+	ContractMainRsPath        = "template/contract/main.rs.template"
 	ContractMainRsFileName    = "./src/main.rs"
-	ContractCargoTomlPath     = "../../../template/contract/Cargo.toml.template"
+	ContractCargoTomlPath     = "template/contract/Cargo.toml.template"
 	ContractCargoTomlFileName = "./Cargo.toml"
 )
 
 const (
-	BackendTsConfigJsonPath     = "../../template/backend/tsconfig.json.template"
+	BackendTsConfigJsonPath     = "template/backend/tsconfig.json.template"
 	BackendTsConfigJsonFileName = "./tsconfig.json"
-	BackendIndexTsPath          = "../../template/backend/index.ts.template"
+	BackendIndexTsPath          = "template/backend/index.ts.template"
 	BackendIndexTsFileName      = "./src/index.ts"
-	BackendGitIgnorePath        = "../../template/backend/gitignore.tempalte"
+	BackendGitIgnorePath        = "template/backend/gitignore.tempalte"
 	BackendGitIgnoreFileName    = "./.gitignore"
-	BackendDotEnvPath           = "../../template/backend/env.template"
+	BackendDotEnvPath           = "template/backend/env.template"
 	BackendDotEnvFileName       = "./.env"
 )
 
 const (
-	ContractListnerTsConfigJsonPath     = "../../template/contract_listner/tsconfig.json.template"
+	ContractListnerTsConfigJsonPath     = "template/contract_listner/tsconfig.json.template"
 	ContractListnerTsConfigJsonFileName = "./tsconfig.json"
-	ContractListnerIndexTsPath          = "../../template/contract_listner/index.ts.template"
+	ContractListnerIndexTsPath          = "template/contract_listner/index.ts.template"
 	ContractListnerIndexTsFileName      = "./src/index.ts"
-	ContractListnerGitIgnorePath        = "../../template/contract_listner/gitignore.tempalte"
+	ContractListnerGitIgnorePath        = "template/contract_listner/gitignore.tempalte"
 	ContractListnerGitIgnoreFileName    = "./.gitignore"
-	ContractListnerDotEnvPath           = "../../template/contract_listner/env.template"
+	ContractListnerDotEnvPath           = "template/contract_listner/env.template"
 	ContractListnerDotEnvFileName       = "./.env"
 )
 
@@ -216,7 +219,7 @@ func CreateSmartContractProject(moduleName string) {
 		log.Fatal(ErrGoProjectSumFileIsMissing)
 	}
 
-	mainGoFileContent, err := ioutil.ReadFile(ContractMainGoPath)
+	mainGoFileContent, err := templates.ReadFile(ContractMainGoPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
@@ -230,12 +233,12 @@ func CreateSmartContractProject(moduleName string) {
 func CreateSmartContractIntegrationTests() {
 	CreateFolderAndNavigateThere(SmartContractProjectIntegrationTestsFolder)
 
-	mainRsFileContent, err := ioutil.ReadFile(ContractMainRsPath)
+	mainRsFileContent, err := templates.ReadFile(ContractMainRsPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
 
-	cargoTomlFileContent, err := ioutil.ReadFile(ContractCargoTomlPath)
+	cargoTomlFileContent, err := templates.ReadFile(ContractCargoTomlPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrToReadFile, err)
 	}
@@ -281,27 +284,27 @@ func CreateReactClientProject() {
 	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
 	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
 
-	appJsxFileContent, err := ioutil.ReadFile(ClientAppJsxPath)
+	appJsxFileContent, err := templates.ReadFile(ClientAppJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	blockchainDataInfoJsxFileContent, err := ioutil.ReadFile(ClientBlockchainDataInfoJsxPath)
+	blockchainDataInfoJsxFileContent, err := templates.ReadFile(ClientBlockchainDataInfoJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	smartContractOperationsJsxFileContent, err := ioutil.ReadFile(ClientSmartContractOperationsJsxPath)
+	smartContractOperationsJsxFileContent, err := templates.ReadFile(ClientSmartContractOperationsJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	mainJsxFileContent, err := ioutil.ReadFile(ClientMainJsxPath)
+	mainJsxFileContent, err := templates.ReadFile(ClientMainJsxPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
-	viteConfigFileContent, err := ioutil.ReadFile(ClientViteConfigPath)
+	viteConfigFileContent, err := templates.ReadFile(ClientViteConfigPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
@@ -321,20 +324,20 @@ func CreateNodeJsBackendProject() {
 	RunCommand("yarn", "add", "express", "cors", "dotenv", "near-api-js", "near-lake-framework", "near-seed-phrase")
 	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express")
 
-	tsConfigJsonFileContent, err := ioutil.ReadFile(BackendTsConfigJsonPath)
+	tsConfigJsonFileContent, err := templates.ReadFile(BackendTsConfigJsonPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	WriteToFile(BackendTsConfigJsonFileName, string(tsConfigJsonFileContent))
 
-	gitIgnoreFileContent, err := ioutil.ReadFile(BackendGitIgnorePath)
+	gitIgnoreFileContent, err := templates.ReadFile(BackendGitIgnorePath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 	WriteToFile(BackendGitIgnoreFileName, string(gitIgnoreFileContent))
 
-	dotEnvFileContent, err := ioutil.ReadFile(BackendDotEnvPath)
+	dotEnvFileContent, err := templates.ReadFile(BackendDotEnvPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
@@ -345,7 +348,7 @@ func CreateNodeJsBackendProject() {
 		fmt.Println("Error creating folder:", err)
 	}
 
-	indexTsFileContent, err := ioutil.ReadFile(BackendIndexTsPath)
+	indexTsFileContent, err := templates.ReadFile(BackendIndexTsPath)
 	if err != nil {
 		log.Fatalf("%s: %v", ErrToReadFile, err)
 	}
@@ -361,20 +364,20 @@ func CreateContractListnerProject() {
 	RunCommand("yarn", "add", "express", "cors", "dotenv")
 	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express", "@near-lake/framework")
 
-	tsConfigJsonFileContent, err := ioutil.ReadFile(ContractListnerTsConfigJsonPath)
+	tsConfigJsonFileContent, err := templates.ReadFile(ContractListnerTsConfigJsonPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 
 	WriteToFile(ContractListnerTsConfigJsonFileName, string(tsConfigJsonFileContent))
 
-	gitIgnoreFileContent, err := ioutil.ReadFile(ContractListnerGitIgnorePath)
+	gitIgnoreFileContent, err := templates.ReadFile(ContractListnerGitIgnorePath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
 	WriteToFile(ContractListnerGitIgnoreFileName, string(gitIgnoreFileContent))
 
-	dotEnvFileContent, err := ioutil.ReadFile(ContractListnerDotEnvPath)
+	dotEnvFileContent, err := templates.ReadFile(ContractListnerDotEnvPath)
 	if err != nil {
 		log.Fatalf("%s %v", ErrNavPrevDir, err)
 	}
@@ -385,7 +388,7 @@ func CreateContractListnerProject() {
 		fmt.Println("Error creating folder:", err)
 	}
 
-	indexTsFileContent, err := ioutil.ReadFile(ContractListnerIndexTsPath)
+	indexTsFileContent, err := templates.ReadFile(ContractListnerIndexTsPath)
 	if err != nil {
 		log.Fatalf("%s: %v", ErrToReadFile, err)
 	}
@@ -514,7 +517,7 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:     "project-type, t",
-						Usage:    "Specify the type of the project, it can be 'smart-contract', 'full-stack'",
+						Usage:    "Specify the type of the project, it can be 'smart-contract', 'full-stack-react-nodejs'",
 						Required: true,
 					},
 				},
