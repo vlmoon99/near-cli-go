@@ -27,6 +27,21 @@ This script will download the necessary binary and install it into your local `~
 
 You can also donwload raw bin from the [Gtihub Releases](https://github.com/vlmoon99/near-cli-go/releases/tag/v1.0.0) and move it into your bin directory.
 
+## Unistall
+
+1.Get path of near-go program
+
+```bash
+which near-go
+```
+
+2.Remove it
+
+```bash
+rm -rf /home/pc1/bin/near-go
+```
+
+
 ## Usage
 
 Once the CLI is installed, you can use the following commands to manage projects on the NEAR blockchain.
