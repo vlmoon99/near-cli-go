@@ -78,15 +78,23 @@ Once the CLI is installed, you can use the following commands to manage projects
    near-go account <subcommand>
    ```
 
+   ```bash
+      near-go account create -n "testnet" -a "accountid.testnet"
+   ```
+
+   ```bash
+   near-go account import
+   ```
+
    This command provides account management functionalities on the NEAR blockchain.
 
 5. **Deploy the smart contract:**
 
    ```bash
-   near-go deploy [--prod]
-   ```
 
-   This deploys the compiled contract to the NEAR network. If `--prod` is specified, it deploys to the mainnet; otherwise, it deploys to the testnet.
+   near-go deploy -id "accountid.testnet || accountid.mainnet" -n "testnet||mainnet"
+
+   ```
 
 6. **View CLI help:**
 
