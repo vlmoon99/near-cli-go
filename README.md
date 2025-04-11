@@ -79,7 +79,7 @@ Once the CLI is installed, you can use the following commands to manage projects
    ```
 
    ```bash
-      near-go account create -n "testnet" -a "accountid.testnet"
+   near-go account create -n "testnet" -a "accountid.testnet"
    ```
 
    ```bash
