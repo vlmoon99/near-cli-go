@@ -8,72 +8,34 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/urfave/cli"
+	"github.com/vlmoon99/near-cli-go/bindata"
 )
 
 //go:embed template/**/*
 var templates embed.FS
 
+// 1.в CLI оставить сreate,build functions,deploy + call-function (from cli)
 const (
-	SmartContractTypeProject        = "smart-contract"
-	FullStackTypeProjectReactNodeJs = "full-stack-react-nodejs"
+	CreateCommand = "create"
+	BuildCommand  = "build"
+	DeployCommand = "deploy"
+	CallFunction  = "call"
 )
 
 const (
-	SmartContractProjectFolder                 = "contract"
-	SmartContractProjectIntegrationTestsFolder = "integration_tests"
-	ClientProjectFolder                        = "client"
-	BackendProjectFolder                       = "backend"
-	ContractListnerProjectFolder               = "contract_listener"
+	SmartContractTypeProject = "smart-contract-empty"
 )
 
 const (
-	ClientAppJsxPath     = "template/client/App.jsx.template"
-	ClientAppJsxFileName = "./src/App.jsx"
-
-	ClientBlockchainDataInfoJsxPath     = "template/client/BlockchainDataInfo.jsx.template"
-	ClientBlockchainDataInfoJsxFileName = "./src/BlockchainDataInfo.jsx"
-
-	ClientSmartContractOperationsJsxPath     = "template/client/SmartContractOperations.jsx.template"
-	ClientSmartContractOperationsJsxFileName = "./src/SmartContractOperations.jsx"
-
-	ClientMainJsxPath     = "template/client/main.jsx.template"
-	ClientMainJsxFileName = "./src/main.jsx"
-
-	ClientViteConfigPath     = "template/client/vite.config.js.template"
-	ClientViteConfigFileName = "./vite.config.js"
+	SmartContractProjectFolder = "contract"
 )
 
 const (
-	ContractMainGoPath        = "template/contract/main.go.template"
-	ContractMainGoFileName    = "./main.go"
-	ContractMainRsPath        = "template/contract/main.rs.template"
-	ContractMainRsFileName    = "./src/main.rs"
-	ContractCargoTomlPath     = "template/contract/Cargo.toml.template"
-	ContractCargoTomlFileName = "./Cargo.toml"
-)
-
-const (
-	BackendTsConfigJsonPath     = "template/backend/tsconfig.json.template"
-	BackendTsConfigJsonFileName = "./tsconfig.json"
-	BackendIndexTsPath          = "template/backend/index.ts.template"
-	BackendIndexTsFileName      = "./src/index.ts"
-	BackendGitIgnorePath        = "template/backend/gitignore.tempalte"
-	BackendGitIgnoreFileName    = "./.gitignore"
-	BackendDotEnvPath           = "template/backend/env.template"
-	BackendDotEnvFileName       = "./.env"
-)
-
-const (
-	ContractListnerTsConfigJsonPath     = "template/contract_listner/tsconfig.json.template"
-	ContractListnerTsConfigJsonFileName = "./tsconfig.json"
-	ContractListnerIndexTsPath          = "template/contract_listner/index.ts.template"
-	ContractListnerIndexTsFileName      = "./src/index.ts"
-	ContractListnerGitIgnorePath        = "template/contract_listner/gitignore.tempalte"
-	ContractListnerGitIgnoreFileName    = "./.gitignore"
-	ContractListnerDotEnvPath           = "template/contract_listner/env.template"
-	ContractListnerDotEnvFileName       = "./.env"
+	ContractMainGoPath     = "template/contract/main.go.template"
+	ContractMainGoFileName = "./main.go"
 )
 
 const (
@@ -93,8 +55,31 @@ const (
 	ErrToReadFile                        = "(INTERNAL_PROJECT): Failed to read file"
 )
 
+func WriteBinaryIfNotExists(path string, data []byte) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0755)
+}
+
+func InitEmbeddedBins() {
+	tempDir := os.TempDir()
+
+	nearCliPath := filepath.Join(tempDir, "near")
+
+	if err := WriteBinaryIfNotExists(nearCliPath, bindata.NearCli); err != nil {
+		panic("failed to write near-cli: " + err.Error())
+	}
+
+}
+
 func NearCLIWrapper(args ...string) error {
-	cmd := exec.Command("near", args...)
+	nearCliPath := filepath.Join(os.TempDir(), "near")
+
+	cmd := exec.Command(nearCliPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -191,18 +176,10 @@ func HandleCreateProject(projectName, projectType, moduleName string) {
 	if projectType == SmartContractTypeProject {
 		CreateFolderAndNavigateThere(projectName)
 		CreateSmartContractProject(moduleName)
-	} else if projectType == FullStackTypeProjectReactNodeJs {
-		CreateFolderAndNavigateThere(projectName)
-		CreateSmartContractProject(moduleName)
-		GoBackToThePrevDirectory()
-		CreateReactClientProject()
-		GoBackToThePrevDirectory()
-		CreateNodeJsBackendProject()
-		GoBackToThePrevDirectory()
-		CreateContractListnerProject()
 	} else {
 		log.Fatal(ErrIncorrectType)
 	}
+
 }
 
 func CreateSmartContractProject(moduleName string) {
@@ -226,184 +203,8 @@ func CreateSmartContractProject(moduleName string) {
 
 	WriteToFile(ContractMainGoFileName, string(mainGoFileContent))
 
-	CreateSmartContractIntegrationTests()
-	GoBackToThePrevDirectory()
-}
-
-func CreateSmartContractIntegrationTests() {
-	CreateFolderAndNavigateThere(SmartContractProjectIntegrationTestsFolder)
-
-	mainRsFileContent, err := templates.ReadFile(ContractMainRsPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrToReadFile, err)
-	}
-
-	cargoTomlFileContent, err := templates.ReadFile(ContractCargoTomlPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrToReadFile, err)
-	}
-
-	RunCommand("cargo", "init", "--bin")
-
-	WriteToFile(ContractCargoTomlFileName, string(cargoTomlFileContent))
-
-	WriteToFile(ContractMainRsFileName, string(mainRsFileContent))
-
-	fmt.Println("Integration tests setup completed successfully!")
-}
-
-func CreateReactClientProject() {
-	CreateFolderAndNavigateThere(ClientProjectFolder)
-
-	command := "echo 'y' | npx create-vite@latest . --template react"
-	cmd := exec.Command("bash", "-c", command)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("%s: %v", ErrInitReactVite, err)
-	}
-
-	RunCommand("yarn", "install")
-
-	RunCommand("yarn", "add", "near-api-js")
-	RunCommand("yarn", "add", "@near-wallet-selector/core")
-	RunCommand("yarn", "add", "@near-wallet-selector/modal-ui")
-
-	RunCommand("yarn", "add", "@near-wallet-selector/my-near-wallet")
-	RunCommand("yarn", "add", "@near-wallet-selector/sender")
-	RunCommand("yarn", "add", "@near-wallet-selector/nearfi")
-	RunCommand("yarn", "add", "@near-wallet-selector/here-wallet")
-	RunCommand("yarn", "add", "@near-wallet-selector/math-wallet")
-	RunCommand("yarn", "add", "@near-wallet-selector/nightly")
-	RunCommand("yarn", "add", "@near-wallet-selector/meteor-wallet")
-	RunCommand("yarn", "add", "@near-wallet-selector/ledger")
-	RunCommand("yarn", "add", "@near-wallet-selector/wallet-connect")
-	RunCommand("yarn", "add", "@near-wallet-selector/default-wallets")
-	RunCommand("yarn", "add", "@near-wallet-selector/coin98-wallet")
-	RunCommand("yarn", "add", "@near-wallet-selector/react-hook")
-	RunCommand("yarn", "add", "--dev", "vite-plugin-node-polyfills")
-
-	appJsxFileContent, err := templates.ReadFile(ClientAppJsxPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	blockchainDataInfoJsxFileContent, err := templates.ReadFile(ClientBlockchainDataInfoJsxPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	smartContractOperationsJsxFileContent, err := templates.ReadFile(ClientSmartContractOperationsJsxPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	mainJsxFileContent, err := templates.ReadFile(ClientMainJsxPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	viteConfigFileContent, err := templates.ReadFile(ClientViteConfigPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	WriteToFile(ClientViteConfigFileName, string(viteConfigFileContent))
-	WriteToFile(ClientMainJsxFileName, string(mainJsxFileContent))
-	WriteToFile(ClientAppJsxFileName, string(appJsxFileContent))
-	WriteToFile(ClientBlockchainDataInfoJsxFileName, string(blockchainDataInfoJsxFileContent))
-	WriteToFile(ClientSmartContractOperationsJsxFileName, string(smartContractOperationsJsxFileContent))
-
-	fmt.Println("React client setup complete!")
-}
-
-func CreateNodeJsBackendProject() {
-	CreateFolderAndNavigateThere(BackendProjectFolder)
-	RunCommand("yarn", "init", "-y")
-	RunCommand("yarn", "add", "express", "cors", "dotenv", "near-api-js", "near-lake-framework", "near-seed-phrase")
-	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express")
-
-	tsConfigJsonFileContent, err := templates.ReadFile(BackendTsConfigJsonPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	WriteToFile(BackendTsConfigJsonFileName, string(tsConfigJsonFileContent))
-
-	gitIgnoreFileContent, err := templates.ReadFile(BackendGitIgnorePath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-	WriteToFile(BackendGitIgnoreFileName, string(gitIgnoreFileContent))
-
-	dotEnvFileContent, err := templates.ReadFile(BackendDotEnvPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-	WriteToFile(BackendDotEnvFileName, string(dotEnvFileContent))
-
-	err = os.Mkdir("src", os.ModePerm)
-	if err != nil {
-		fmt.Println("Error creating folder:", err)
-	}
-
-	indexTsFileContent, err := templates.ReadFile(BackendIndexTsPath)
-	if err != nil {
-		log.Fatalf("%s: %v", ErrToReadFile, err)
-	}
-	WriteToFile(BackendIndexTsFileName, string(indexTsFileContent))
-
-	RunCommand("npm", "i")
-
-	RunCommand("yarn")
-
-	fmt.Println("Node.js server setup complete!")
-
-}
-
-func CreateContractListnerProject() {
-	CreateFolderAndNavigateThere(ContractListnerProjectFolder)
-	RunCommand("yarn", "init", "-y")
-	RunCommand("yarn", "add", "express", "cors", "dotenv")
-	RunCommand("yarn", "add", "-D", "typescript", "ts-node", "@types/node", "@types/express", "@near-lake/framework")
-
-	tsConfigJsonFileContent, err := templates.ReadFile(ContractListnerTsConfigJsonPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-
-	WriteToFile(ContractListnerTsConfigJsonFileName, string(tsConfigJsonFileContent))
-
-	gitIgnoreFileContent, err := templates.ReadFile(ContractListnerGitIgnorePath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-	WriteToFile(ContractListnerGitIgnoreFileName, string(gitIgnoreFileContent))
-
-	dotEnvFileContent, err := templates.ReadFile(ContractListnerDotEnvPath)
-	if err != nil {
-		log.Fatalf("%s %v", ErrNavPrevDir, err)
-	}
-	WriteToFile(ContractListnerDotEnvFileName, string(dotEnvFileContent))
-
-	err = os.Mkdir("src", os.ModePerm)
-	if err != nil {
-		fmt.Println("Error creating folder:", err)
-	}
-
-	indexTsFileContent, err := templates.ReadFile(ContractListnerIndexTsPath)
-	if err != nil {
-		log.Fatalf("%s: %v", ErrToReadFile, err)
-	}
-	WriteToFile(ContractListnerIndexTsFileName, string(indexTsFileContent))
-
-	RunCommand("npm", "i")
-
-	RunCommand("yarn")
-
-	fmt.Println("Node.js contract listener setup complete!")
-
+	// CreateSmartContractIntegrationTests()
+	// GoBackToThePrevDirectory()
 }
 
 // Project
@@ -455,18 +256,14 @@ func PackageTest() {
 	TinygoRunWithRetryWrapper("tinygo", []string{"test", "./"}, "package")
 }
 
-func FullTest() {
-	ProjectTest()
-}
-
 //Test
 
 // Check internal deps
-func checkDependencies(programs map[string]string) {
+func CheckDependencies(programs map[string]string) {
 	missing := []string{}
 
 	for program, helpMsg := range programs {
-		if !isInstalled(program) {
+		if !IsInstalled(program) {
 			missing = append(missing, fmt.Sprintf("%s - %s", program, helpMsg))
 		}
 	}
@@ -476,18 +273,18 @@ func checkDependencies(programs map[string]string) {
 		for _, msg := range missing {
 			fmt.Println(" -", msg)
 		}
-		exitWithHelp()
+		ExitWithHelp()
 	} else {
 		fmt.Println("All necessary programs are installed.")
 	}
 }
 
-func isInstalled(command string) bool {
+func IsInstalled(command string) bool {
 	_, err := exec.LookPath(command)
 	return err == nil
 }
 
-func exitWithHelp() {
+func ExitWithHelp() {
 	fmt.Println("Please install the missing programs and try again.")
 	exec.Command("exit", "1").Run()
 }
@@ -495,16 +292,13 @@ func exitWithHelp() {
 // Check internal deps
 
 func main() {
+	InitEmbeddedBins()
 	programs := map[string]string{
-		"npm":    "Node.js package manager (Install from: https://nodejs.org/)",
-		"yarn":   "Alternative package manager for Node.js (Install from: https://yarnpkg.com/)",
 		"go":     "Go programming language (Install from: https://go.dev/dl/)",
 		"tinygo": "TinyGo compiler for WebAssembly (Install from: https://tinygo.org/getting-started/)",
-		"rustc":  "Rust compiler (Install from: https://www.rust-lang.org/tools/install)",
-		"near":   "NEAR CLI for blockchain interactions (Install from: https://github.com/near/near-cli-rs)",
 	}
 
-	checkDependencies(programs)
+	CheckDependencies(programs)
 	app := &cli.App{
 		Name:  "near-go",
 		Usage: "CLI tool for managing projects on Near Blockchain",
@@ -525,7 +319,7 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:     "project-type, t",
-						Usage:    "Specify the type of the project, it can be 'smart-contract', 'full-stack-react-nodejs'",
+						Usage:    "Specify the type of the project, it can be 'smart-contract-empty'",
 						Required: true,
 					},
 				},
