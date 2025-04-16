@@ -19,10 +19,12 @@ var templates embed.FS
 
 // 1.в CLI оставить сreate,build functions,deploy + call-function (from cli)
 const (
-	CreateCommand = "create"
-	BuildCommand  = "build"
-	DeployCommand = "deploy"
-	CallFunction  = "call"
+	CreateCommand  = "create"
+	TestCommand    = "test"
+	BuildCommand   = "build"
+	AccountCommand = "account"
+	DeployCommand  = "deploy"
+	CallFunction   = "call"
 )
 
 const (
@@ -258,6 +260,53 @@ func PackageTest() {
 
 //Test
 
+//Deploy
+
+func HandleDeployContract(smartContractID string, network string) (bool, error) {
+	deployCmd := []string{
+		"contract", "deploy", smartContractID, "use-file", "./main.wasm",
+		"without-init-call",
+		"network-config", network,
+		"sign-with-legacy-keychain",
+		"send",
+	}
+
+	if err := NearCLIWrapper(deployCmd...); err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return true, err
+	}
+	return false, nil
+}
+
+//Deploy
+
+// Account
+
+func HandleCreateAccount(network string, name string) (bool, error) {
+	if network == "prod" {
+		if err := NearCLIWrapper("account", "create-account", "fund-later", "use-auto-generation", "save-to-folder", "./"); err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return true, err
+		}
+	} else {
+		if err := NearCLIWrapper("account", "create-account", "sponsor-by-faucet-service", name, "autogenerate-new-keypair", "save-to-legacy-keychain", "network-config", "testnet", "create"); err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return true, err
+		}
+	}
+	return false, nil
+}
+
+func HandleImportAccount() (bool, error) {
+	if err := NearCLIWrapper("account", "import-account"); err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return true, err
+	}
+	return false, nil
+}
+
+//Account
+
 // Check internal deps
 func CheckDependencies(programs map[string]string) {
 	missing := []string{}
@@ -304,7 +353,7 @@ func main() {
 		Usage: "CLI tool for managing projects on Near Blockchain",
 		Commands: []cli.Command{
 			{
-				Name:  "create",
+				Name:  CreateCommand,
 				Usage: "Create a new project",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -337,7 +386,7 @@ func main() {
 				},
 			},
 			{
-				Name:  "build",
+				Name:  BuildCommand,
 				Usage: "Build the project",
 				Action: func(c *cli.Context) error {
 					HandleBuild()
@@ -345,7 +394,7 @@ func main() {
 				},
 			},
 			{
-				Name:  "test",
+				Name:  TestCommand,
 				Usage: "Run tests",
 				Subcommands: []cli.Command{
 					{
@@ -369,7 +418,7 @@ func main() {
 				},
 			},
 			{
-				Name:  "account",
+				Name:  AccountCommand,
 				Usage: "Manage blockchain accounts",
 				Subcommands: []cli.Command{
 					{
@@ -400,16 +449,9 @@ func main() {
 
 							}
 
-							if network == "prod" {
-								if err := NearCLIWrapper("account", "create-account", "fund-later", "use-auto-generation", "save-to-folder", "./"); err != nil {
-									fmt.Printf("Error: %s\n", err)
-									return err
-								}
-							} else {
-								if err := NearCLIWrapper("account", "create-account", "sponsor-by-faucet-service", name, "autogenerate-new-keypair", "save-to-legacy-keychain", "network-config", "testnet", "create"); err != nil {
-									fmt.Printf("Error: %s\n", err)
-									return err
-								}
+							shouldReturn, err := HandleCreateAccount(network, name)
+							if shouldReturn {
+								return err
 							}
 
 							fmt.Println("Development account created successfully!")
@@ -420,8 +462,8 @@ func main() {
 						Name:  "import",
 						Usage: "Import an account",
 						Action: func(c *cli.Context) error {
-							if err := NearCLIWrapper("account", "import-account"); err != nil {
-								fmt.Printf("Error: %s\n", err)
+							shouldReturn, err := HandleImportAccount()
+							if shouldReturn {
 								return err
 							}
 
@@ -432,7 +474,7 @@ func main() {
 				},
 			},
 			{
-				Name:  "deploy",
+				Name:  DeployCommand,
 				Usage: "Deploy the project to production",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -454,16 +496,8 @@ func main() {
 						return errors.New(ErrProvidedNetworkAndContractId)
 
 					}
-					deployCmd := []string{
-						"contract", "deploy", smartContractID, "use-file", "./main.wasm",
-						"without-init-call",
-						"network-config", network,
-						"sign-with-legacy-keychain",
-						"send",
-					}
-
-					if err := NearCLIWrapper(deployCmd...); err != nil {
-						fmt.Printf("Error: %s\n", err)
+					shouldReturn, err := HandleDeployContract(smartContractID, network)
+					if shouldReturn {
 						return err
 					}
 
