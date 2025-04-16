@@ -1,108 +1,144 @@
 ### 🚨 **IMPORTANT PREREQUISITES** 🚨  
 
-### Before using the `near-go` CLI, ensure you have the following tools installed on your PC:  
+Before using the `near-go` CLI, ensure you have the following tools installed on your PC:
 
-### ⚠️ If any of these tools are missing, you won't be able to use the full functionality of the `near-go` CLI.  
-### This CLI acts as a proxy to `near-cli-rs` and `TinyGo`.  
+1. **[Go](https://go.dev/doc/install)** – _Required for Go-based development._  
+2. **[TinyGo](https://tinygo.org/getting-started/install/)** – _Required for building smart contracts._  
 
-1. **[Node.js and npm](https://nodejs.org/)** – _Required for managing JavaScript dependencies._  
-2. **[Yarn](https://yarnpkg.com/getting-started/install)** – _An alternative package manager for JavaScript dependencies._  
-3. **[Go](https://go.dev/doc/install)** – _Required for Go-based development._  
-4. **[Rust](https://www.rust-lang.org/tools/install)** – _Required for Rust-based development and integration testing._  
-5. **[near-cli-rs](https://github.com/near/near-cli-rs)** – _Required for interacting with the NEAR network._  
-6. **[TinyGo](https://tinygo.org/getting-started/install/)** – _Required for building smart contracts._  
-7. **[Near CLI](https://github.com/near/near-cli)** – _Required for interacting with the NEAR network._  
+⚠️ **If any of these tools are missing, you won't be able to use the full functionality of the `near-go` CLI.**  
+This CLI acts as a proxy to `TinyGo`.  
 
-### ⚠️ **Make sure these tools are installed to avoid errors!** ⚠️  
+---
 
 # NEAR CLI Go
 
-This is a simple CLI tool to manage NEAR smart contract projects. It provides functionality to create, build, deploy, and manage developer accounts on the NEAR network. The tool is compatible with Linux, macOS, and Windows.
+A simple CLI tool to manage NEAR smart contract projects. Supports creating, building, deploying contracts, and managing accounts on the NEAR blockchain. Compatible with Linux, macOS, and Windows.
 
 ## Installation
+
 ```bash
 curl -LO https://github.com/vlmoon99/near-cli-go/releases/latest/download/install.sh && bash install.sh
 ```
-This script will download the necessary binary and install it into your local `~/bin` directory. It will also update your `PATH` to ensure the `near-go` binary is accessible globally.
 
-You can also donwload raw bin from the [Gtihub Releases](https://github.com/vlmoon99/near-cli-go/releases/tag/v1.0.0) and move it into your bin directory.
+This script installs the `near-go` binary to your `~/bin` directory and adds it to your `PATH`.  
+Alternatively, [download from GitHub Releases](https://github.com/vlmoon99/near-cli-go/releases/tag/v1.0.0) and move it manually to your bin.
 
-## Unistall
+## Uninstall
 
-1.Get path of near-go program
+1. Get path of `near-go` binary:
 
-```bash
-which near-go
-```
+   ```bash
+   which near-go
+   ```
 
-2.Remove it
+2. Remove it:
 
-```bash
-rm -rf /home/pc1/bin/near-go
-```
+   ```bash
+   rm -rf /home/your-user/bin/near-go
+   ```
 
+---
 
 ## Usage
 
-Once the CLI is installed, you can use the following commands to manage projects on the NEAR blockchain.
+Once installed, use the following commands to manage NEAR smart contracts.
 
 ### Available Commands
 
-1. **Create a new project:**
+#### 1. **Create a new project**
 
-   ```bash
-   near-go create -p <projectName> -m <moduleName>
-   ```
+```bash
+near-go create -p <projectName> -m <moduleName>
+```
 
-   This creates a new project directory and initializes it with a Go module.
+#### 2. **Build the project**
 
-2. **Build the project:**
+```bash
+near-go build
+```
 
-   ```bash
-   near-go build
-   ```
+Generates a `main.wasm` using TinyGo.
 
-   This compiles the smart contract using TinyGo and generates the `main.wasm` file.
+#### 3. **Run tests**
 
-3. **Run tests:**
+```bash
+near-go test
+```
 
-   ```bash
-   near-go test
-   ```
+Runs smart contract tests using TinyGo.
 
-   This runs the tests for the smart contract package and project using the TinyGo test command.
+#### 4. **Manage blockchain accounts**
 
-4. **Manage blockchain accounts:**
+```bash
+near-go account <subcommand>
+```
 
-   ```bash
-   near-go account <subcommand>
-   ```
+Examples:
 
-   ```bash
-   near-go account create -n "testnet" -a "accountid.testnet"
-   ```
+```bash
+near-go account create -n "testnet" -a "accountid.testnet"
+near-go account import
+```
 
-   ```bash
-   near-go account import
-   ```
+#### 5. **Deploy the smart contract**
 
-   This command provides account management functionalities on the NEAR blockchain.
+```bash
+near-go deploy -id "accountid.testnet" -n "testnet"
+```
 
-5. **Deploy the smart contract:**
+#### 6. **Call smart contract functions**
 
-   ```bash
+```bash
+near-go call --from <signer> --to <contract> --function <method> [--args <json>] [--gas <amount>] [--deposit <amount>] --network <network>
+```
 
-   near-go deploy -id "accountid.testnet || accountid.mainnet" -n "testnet||mainnet"
+**Examples:**
 
-   ```
+Call a view or change method with default args and values:
 
-6. **View CLI help:**
+```bash
+go run main.go call \
+  --from neargocli.testnet \
+  --to neargocli.testnet \
+  --function ReadIncommingTxData \
+  --network testnet
+```
 
-   ```bash
-   near-go help
-   ```
+Call with all parameters set explicitly:
 
-   Displays a list of available commands or detailed help for a specific command.
+```bash
+go run main.go call \
+  --from neargocli.testnet \
+  --to neargocli.testnet \
+  --function ReadIncommingTxData \
+  --args '{}' \
+  --gas '100 Tgas' \
+  --deposit '0 NEAR' \
+  --network testnet
+```
+
+Call a method with arguments:
+
+```bash
+go run main.go call \
+  --from neargocli.testnet \
+  --to neargocli.testnet \
+  --function WriteData \
+  --args '{"key": "testKey", "data": "lalalla"}' \
+  --gas '100 Tgas' \
+  --deposit '0 NEAR' \
+  --network testnet
+```
+
+#### 7. **View help**
+
+```bash
+near-go help
+```
+
+Displays list of all available commands and help for individual commands.
+
+---
 
 ### CLI Help Output Example
 
@@ -121,6 +157,7 @@ COMMANDS:
    test     Run tests
    account  Manage blockchain accounts
    deploy   Deploy the project to production
+   call     Call a smart contract function
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:

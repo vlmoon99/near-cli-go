@@ -17,7 +17,6 @@ import (
 //go:embed template/**/*
 var templates embed.FS
 
-// 1.в CLI оставить сreate,build functions,deploy + call-function (from cli)
 const (
 	CreateCommand  = "create"
 	TestCommand    = "test"
@@ -115,8 +114,6 @@ func TinygoRunWithRetryWrapper(command string, args []string, entityType string)
 }
 
 func RunCommand(name string, args ...string) ([]byte, error) {
-	// fmt.Printf("Running command: %s %v\n", name, args)
-
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = &stdout
@@ -134,7 +131,6 @@ func RunCommand(name string, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
 
-	//TODO : Getting know why near cli rs gives us error
 	if stdout.String() == "" {
 		return stderr.Bytes(), nil
 	}
@@ -204,9 +200,6 @@ func CreateSmartContractProject(moduleName string) {
 	}
 
 	WriteToFile(ContractMainGoFileName, string(mainGoFileContent))
-
-	// CreateSmartContractIntegrationTests()
-	// GoBackToThePrevDirectory()
 }
 
 // Project
@@ -306,6 +299,34 @@ func HandleImportAccount() (bool, error) {
 }
 
 //Account
+
+// Call Smart Contract
+func HandleCallFunction(
+	signer, contract, method, args, gas, deposit, network string,
+) error {
+	callCmd := []string{
+		"contract", "call-function",
+		"as-transaction", contract, method,
+		"json-args", args,
+		"prepaid-gas", gas,
+		"attached-deposit", deposit,
+		"sign-as", signer,
+		"network-config", network,
+		"sign-with-keychain",
+		"send",
+	}
+
+	fmt.Printf("📞 Calling function `%s` on contract `%s` from `%s`...\n", method, contract, signer)
+	if err := NearCLIWrapper(callCmd...); err != nil {
+		fmt.Printf("❌ Error calling function: %s\n", err)
+		return err
+	}
+
+	fmt.Println("✅ Smart contract function call completed.")
+	return nil
+}
+
+//Call Smart Contract
 
 // Check internal deps
 func CheckDependencies(programs map[string]string) {
@@ -503,6 +524,65 @@ func main() {
 
 					fmt.Println("Smart Contract deployed !")
 					return nil
+				},
+			},
+			{
+				Name:  "call",
+				Usage: "Call a smart contract function",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "signer, from",
+						Usage:    "Account that signs the transaction",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "contract, to",
+						Usage:    "Target contract account",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "method, function",
+						Usage:    "Function name to call",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "args",
+						Usage: "JSON-formatted arguments (optional, default: '{}')",
+					},
+					&cli.StringFlag{
+						Name:  "gas",
+						Usage: "Amount of gas to attach (default: 100 Tgas)",
+					},
+					&cli.StringFlag{
+						Name:  "deposit",
+						Usage: "Amount of NEAR to attach (default: 0 NEAR)",
+					},
+					&cli.StringFlag{
+						Name:     "network",
+						Usage:    "Specify the network",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					signer := c.String("signer")
+					contract := c.String("contract")
+					method := c.String("method")
+					args := c.String("args")
+					gas := c.String("gas")
+					deposit := c.String("deposit")
+					network := c.String("network")
+					print(args)
+					if args == "" {
+						args = "{}"
+					}
+					if gas == "" {
+						gas = "100 Tgas"
+					}
+					if deposit == "" {
+						deposit = "0 NEAR"
+					}
+
+					return HandleCallFunction(signer, contract, method, args, gas, deposit, network)
 				},
 			},
 		},
