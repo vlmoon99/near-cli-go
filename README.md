@@ -10,6 +10,15 @@ This CLI acts as a proxy to `TinyGo`.
 
 ---
 
+# Setup repo for development
+```bash
+bash setup.sh
+```
+
+This script installs all internal bins to the  ```/near-cli-go/bindata/tools```
+
+
+
 # NEAR CLI Go
 
 A simple CLI tool to manage NEAR smart contract projects. Supports creating, building, deploying contracts, and managing accounts on the NEAR blockchain. Compatible with Linux, macOS, and Windows.
@@ -48,7 +57,9 @@ Once installed, use the following commands to manage NEAR smart contracts.
 #### 1. **Create a new project**
 
 ```bash
-near-go create -p <projectName> -m <moduleName>
+near-go create -p <projectName> -m <moduleName> -t <type of project>
+
+near-go create -p "test1" -m "test1" -t "smart-contract-empty"
 ```
 
 #### 2. **Build the project**
