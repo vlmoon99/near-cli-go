@@ -19,7 +19,7 @@ echo "Fetching latest release info from GitHub..."
 RELEASE_JSON=$(curl -s "$LATEST_URL")
 
 for PLATFORM in "${PLATFORMS[@]}"; do
-  ZIP_NAME="${PLATFORM}_near_cli_rs.zip"
+  ZIP_NAME="${PLATFORM}_bins.zip"
   PLATFORM_DIR="${TOOLS_DIR}/"
   PLATFORM_BIN="${TOOLS_DIR}/${PLATFORM}"
 

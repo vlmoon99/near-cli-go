@@ -91,10 +91,10 @@ func NearCLIWrapper(args ...string) error {
 	return nil
 }
 
-func TinygoRunWithRetryWrapper(command string, args []string, entityType string) {
+func TinygoRunWithRetryWrapper(args []string, entityType string) {
 	fmt.Printf("Running tests for the %s...\n", entityType)
 
-	cmd := exec.Command(command, args...)
+	cmd := exec.Command("tiygo", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("First %s test attempt failed: %s\n", entityType, string(output))
@@ -211,7 +211,7 @@ func HandleBuild() {
 }
 
 func BuildContract() {
-	TinygoRunWithRetryWrapper("tinygo", []string{
+	TinygoRunWithRetryWrapper([]string{
 		"build", "-size", "short", "-no-debug", "-panic=trap",
 		"-scheduler=none", "-gc=leaking", "-o", "main.wasm",
 		"-target", "wasm-unknown", "./",
@@ -244,11 +244,11 @@ func HandleTests(testType string) {
 }
 
 func ProjectTest() {
-	TinygoRunWithRetryWrapper("tinygo", []string{"test", "./..."}, "project")
+	TinygoRunWithRetryWrapper([]string{"test", "./..."}, "project")
 }
 
 func PackageTest() {
-	TinygoRunWithRetryWrapper("tinygo", []string{"test", "./"}, "package")
+	TinygoRunWithRetryWrapper([]string{"test", "./"}, "package")
 }
 
 //Test
@@ -363,6 +363,7 @@ func ExitWithHelp() {
 
 func main() {
 	InitEmbeddedBins()
+
 	programs := map[string]string{
 		"go":     "Go programming language (Install from: https://go.dev/dl/)",
 		"tinygo": "TinyGo compiler for WebAssembly (Install from: https://tinygo.org/getting-started/)",

@@ -3,7 +3,9 @@
 
 package bindata
 
-import _ "embed"
+import (
+	_ "embed"
+)
 
 //go:embed tools/darwin_arm64/near
 var NearCli []byte
