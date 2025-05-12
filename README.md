@@ -135,7 +135,7 @@ go run main.go call \
   --from neargocli.testnet \
   --to neargocli.testnet \
   --function WriteData \
-  --args '{"key": "testKey", "data": "lalalla"}' \
+  --args '{"key": "testKey", "data": "test1"}' \
   --gas '100 Tgas' \
   --deposit '0 NEAR' \
   --network testnet
