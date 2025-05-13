@@ -94,16 +94,19 @@ func NearCLIWrapper(args ...string) error {
 func TinygoRunWithRetryWrapper(args []string, entityType string) {
 	fmt.Printf("Running tests for the %s...\n", entityType)
 
-	cmd := exec.Command("tiygo", args...)
+	cmd := exec.Command("tinygo", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("First %s test attempt failed: %s\n", entityType, string(output))
+		fmt.Printf("Error first :  %s\n", err.Error())
 
 		fmt.Printf("Retrying %s tests...\n", entityType)
 		output, err = cmd.CombinedOutput()
 		fmt.Println(string(output))
 
 		if err != nil {
+			fmt.Printf("Error second :  %s\n", err.Error())
+
 			fmt.Printf("Second %s test attempt failed: %s\n", entityType, string(output))
 			return
 		}
@@ -216,7 +219,6 @@ func BuildContract() {
 		"-scheduler=none", "-gc=leaking", "-o", "main.wasm",
 		"-target", "wasm-unknown", "./",
 	}, "build")
-
 	listCmd := exec.Command("ls", "-lh", "main.wasm")
 	listOutput, err := listCmd.CombinedOutput()
 	if err != nil {
