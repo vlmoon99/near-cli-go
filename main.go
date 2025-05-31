@@ -215,8 +215,7 @@ func HandleBuild() {
 
 func BuildContract() {
 	TinygoRunWithRetryWrapper([]string{
-		"build", "-size", "short", "-no-debug", "-panic=trap",
-		"-scheduler=none", "-gc=leaking", "-o", "main.wasm",
+		"build", "-size", "short", "-no-debug", "-o", "main.wasm",
 		"-target", "wasm-unknown", "./",
 	}, "build")
 	listCmd := exec.Command("ls", "-lh", "main.wasm")

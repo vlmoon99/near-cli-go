@@ -26,7 +26,7 @@ A simple CLI tool to manage NEAR smart contract projects. Supports creating, bui
 ## Installation
 
 ```bash
-curl -LO https://github.com/vlmoon99/near-cli-go/releases/latest/download/install.sh && bash install.sh
+curl -LO https://github.com/vlmoon99/near-cli-go/releases/latest/download/install.sh && bash install.sh && rm install.sh
 ```
 
 This script installs the `near-go` binary to your `~/bin` directory and adds it to your `PATH`.  
