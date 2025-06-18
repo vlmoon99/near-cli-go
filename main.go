@@ -191,7 +191,7 @@ func CreateSmartContractProject(moduleName string) {
 		log.Fatal(ErrGoProjectModFileIsMissing)
 	}
 
-	RunCommand("go", "get", "github.com/vlmoon99/near-sdk-go@v0.0.8")
+	RunCommand("go", "get", "github.com/vlmoon99/near-sdk-go@latest")
 
 	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
 		log.Fatal(ErrGoProjectSumFileIsMissing)

@@ -108,7 +108,7 @@ near-go call --from <signer> --to <contract> --function <method> [--args <json>]
 Call a view or change method with default args and values:
 
 ```bash
-go run main.go call \
+near-go call \
   --from neargocli.testnet \
   --to neargocli.testnet \
   --function ReadIncommingTxData \
@@ -118,7 +118,7 @@ go run main.go call \
 Call with all parameters set explicitly:
 
 ```bash
-go run main.go call \
+near-go call \
   --from neargocli.testnet \
   --to neargocli.testnet \
   --function ReadIncommingTxData \
@@ -131,7 +131,7 @@ go run main.go call \
 Call a method with arguments:
 
 ```bash
-go run main.go call \
+near-go call \
   --from neargocli.testnet \
   --to neargocli.testnet \
   --function WriteData \
