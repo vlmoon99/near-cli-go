@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/urfave/cli"
 	"github.com/vlmoon99/near-cli-go/bindata"
@@ -40,6 +41,10 @@ const (
 )
 
 const (
+	NearSdkGoVersion = "v0.0.12"
+)
+
+const (
 	ErrProvidedNetwork                   = "(USER_INPUT_ERROR): Missing 'network'"
 	ErrProvidedNetworkAndAccountName     = "(USER_INPUT_ERROR): Missing both 'network' and 'account-name'"
 	ErrProvidedNetworkAndContractId      = "(USER_INPUT_ERROR): Missing both 'network' and 'contract-id'"
@@ -54,6 +59,9 @@ const (
 	ErrGoProjectMainGoFileIsMissing      = "(INTERNAL_PROJECT_CONTRACT): Missing 'main.go' file"
 	ErrGettingCurrentDir                 = "(INTERNAL_PROJECT): Error getting current directory:"
 	ErrToReadFile                        = "(INTERNAL_PROJECT): Failed to read file"
+	ErrBuildFailed                       = "(BUILD_ERROR): Build failed after retries"
+	ErrWasmNotFound                      = "(BUILD_ERROR): WASM file not found after build"
+	ErrNetworkUnreachable                = "(NETWORK_ERROR): Unable to download dependencies. Please check your internet connection"
 )
 
 func WriteBinaryIfNotExists(path string, data []byte) error {
@@ -91,29 +99,33 @@ func NearCLIWrapper(args ...string) error {
 	return nil
 }
 
-func TinygoRunWithRetryWrapper(args []string, entityType string) {
-	fmt.Printf("Running tests for the %s...\n", entityType)
+func TinygoRunWithRetryWrapper(args []string, entityType string) error {
+	maxRetries := 2
+	var lastError error
 
-	cmd := exec.Command("tinygo", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("First %s test attempt failed: %s\n", entityType, string(output))
-		fmt.Printf("Error first :  %s\n", err.Error())
+	fmt.Printf("🔨 Building %s...\n", entityType)
 
-		fmt.Printf("Retrying %s tests...\n", entityType)
-		output, err = cmd.CombinedOutput()
-		fmt.Println(string(output))
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			fmt.Printf("⚡ Retrying build (attempt %d/%d)...\n", i+1, maxRetries)
+		}
 
-		if err != nil {
-			fmt.Printf("Error second :  %s\n", err.Error())
+		cmd := exec.Command("tinygo", args...)
+		output, err := cmd.CombinedOutput()
 
-			fmt.Printf("Second %s test attempt failed: %s\n", entityType, string(output))
-			return
+		if err == nil {
+			fmt.Println(string(output))
+			return nil
+		}
+
+		lastError = err
+
+		if i == maxRetries-1 || os.Getenv("DEBUG") != "" {
+			fmt.Printf("🔍 Build output:\n%s\n", string(output))
 		}
 	}
 
-	fmt.Println(string(output))
-	fmt.Printf("%s tests completed successfully!\n", entityType)
+	return fmt.Errorf("%s: %v", ErrBuildFailed, lastError)
 }
 
 func RunCommand(name string, args ...string) ([]byte, error) {
@@ -123,14 +135,15 @@ func RunCommand(name string, args ...string) ([]byte, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Start(); err != nil {
-		fmt.Printf("Command start error: %v\n", err)
-
 		return nil, fmt.Errorf("%s: %v", ErrRunningCmd, err)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		fmt.Printf("Command execution error: %v\n", err)
-		fmt.Printf("Stderr: %s\n", stderr.String())
+		if strings.Contains(stderr.String(), "network is unreachable") ||
+			strings.Contains(stderr.String(), "no route to host") ||
+			strings.Contains(stderr.String(), "dial tcp") {
+			return nil, fmt.Errorf("%s", ErrNetworkUnreachable)
+		}
 		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
 
@@ -173,83 +186,118 @@ func GoBackToThePrevDirectory() {
 
 // Project
 
-func HandleCreateProject(projectName, projectType, moduleName string) {
+func HandleCreateProject(projectName, projectType, moduleName string) error {
 	if projectType == SmartContractTypeProject {
+		fmt.Printf("🚀 Creating new smart contract project '%s'...\n", projectName)
 		CreateFolderAndNavigateThere(projectName)
-		CreateSmartContractProject(moduleName)
-	} else {
-		log.Fatal(ErrIncorrectType)
+		if err := CreateSmartContractProject(moduleName); err != nil {
+			fmt.Printf("❌ Project creation failed: %v\n", err)
+			if err := os.Chdir(".."); err == nil {
+				os.RemoveAll(projectName)
+			}
+			return err
+		}
+		return nil
 	}
-
+	return fmt.Errorf("%s", ErrIncorrectType)
 }
 
-func CreateSmartContractProject(moduleName string) {
+func CreateSmartContractProject(moduleName string) error {
 	CreateFolderAndNavigateThere(SmartContractProjectFolder)
-	RunCommand("go", "mod", "init", moduleName)
+
+	fmt.Println("📦 Initializing Go module...")
+	if _, err := RunCommand("go", "mod", "init", moduleName); err != nil {
+		return fmt.Errorf("Failed to initialize Go module: %v", err)
+	}
 
 	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
-		log.Fatal(ErrGoProjectModFileIsMissing)
+		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
 	}
 
-	RunCommand("go", "get", "github.com/vlmoon99/near-sdk-go@latest")
+	fmt.Println("📥 Downloading dependencies...")
+	if _, err := RunCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
+		return err
+	}
 
 	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
-		log.Fatal(ErrGoProjectSumFileIsMissing)
+		return fmt.Errorf("%s", ErrGoProjectSumFileIsMissing)
 	}
 
+	fmt.Println("📝 Creating contract template...")
 	mainGoFileContent, err := templates.ReadFile(ContractMainGoPath)
 	if err != nil {
-		log.Fatalf("%s %v", ErrToReadFile, err)
+		return fmt.Errorf("%s %v", ErrToReadFile, err)
 	}
 
 	WriteToFile(ContractMainGoFileName, string(mainGoFileContent))
+	fmt.Println("✅ Smart contract project created successfully!")
+	return nil
 }
 
 // Project
 
 // Build
 
-func HandleBuild() {
-	BuildContract()
+func HandleBuild() error {
+	return BuildContract()
 }
 
-func BuildContract() {
-	TinygoRunWithRetryWrapper([]string{
+func BuildContract() error {
+	buildArgs := []string{
 		"build", "-size", "short", "-no-debug", "-o", "main.wasm",
 		"-target", "wasm-unknown", "./",
-	}, "build")
+	}
+
+	if err := TinygoRunWithRetryWrapper(buildArgs, "smart contract"); err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return err
+	}
+
+	if _, err := os.Stat("main.wasm"); os.IsNotExist(err) {
+		return fmt.Errorf("%s", ErrWasmNotFound)
+	}
+
 	listCmd := exec.Command("ls", "-lh", "main.wasm")
 	listOutput, err := listCmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("Error listing the file: %s\n", string(listOutput))
-		return
+		fmt.Printf("⚠️ Warning: Could not get WASM file info: %s\n", err)
+	} else {
+		fmt.Printf("📦 Generated WASM file: %s", string(listOutput))
 	}
 
-	fmt.Println(string(listOutput))
-	fmt.Println("Project build completed!")
+	fmt.Println("✅ Build completed successfully!")
+	return nil
 }
 
 // Build
 
 // Test
 
-func HandleTests(testType string) {
+func HandleTests(testType string) error {
 	switch testType {
 	case "project":
-		ProjectTest()
+		return ProjectTest()
 	case "package":
-		PackageTest()
+		return PackageTest()
 	default:
-		fmt.Println("Invalid test type! Use 'project' or 'package'.")
+		return fmt.Errorf("Invalid test type! Use 'project' or 'package'.")
 	}
 }
 
-func ProjectTest() {
-	TinygoRunWithRetryWrapper([]string{"test", "./..."}, "project")
+func ProjectTest() error {
+	if err := TinygoRunWithRetryWrapper([]string{"test", "./..."}, "project tests"); err != nil {
+		return err
+	}
+	fmt.Println("✅ Project tests completed successfully!")
+	return nil
 }
 
-func PackageTest() {
-	TinygoRunWithRetryWrapper([]string{"test", "./"}, "package")
+func PackageTest() error {
+	if err := TinygoRunWithRetryWrapper([]string{"test", "./"}, "package tests"); err != nil {
+		return err
+	}
+	fmt.Println("✅ Package tests completed successfully!")
+	return nil
 }
 
 //Test
@@ -401,10 +449,12 @@ func main() {
 					moduleName := c.String("module-name")
 
 					if projectName == "" || projectType == "" || moduleName == "" {
-						return errors.New(ErrProvidedProjectNameModuleNameType)
+						return fmt.Errorf("%s", ErrProvidedProjectNameModuleNameType)
 					}
 
-					HandleCreateProject(projectName, projectType, moduleName)
+					if err := HandleCreateProject(projectName, projectType, moduleName); err != nil {
+						return err
+					}
 					return nil
 				},
 			},
@@ -412,7 +462,11 @@ func main() {
 				Name:  BuildCommand,
 				Usage: "Build the project",
 				Action: func(c *cli.Context) error {
-					HandleBuild()
+					err := HandleBuild()
+					if err != nil {
+						fmt.Printf("❌ Build failed: %v\n", err)
+						return err
+					}
 					return nil
 				},
 			},
@@ -424,8 +478,10 @@ func main() {
 						Name:  "project",
 						Usage: "Test the project",
 						Action: func(c *cli.Context) error {
-							fmt.Println("Project test completed!")
-							HandleTests("project")
+							if err := HandleTests("project"); err != nil {
+								fmt.Printf("❌ Project tests failed: %v\n", err)
+								return err
+							}
 							return nil
 						},
 					},
@@ -433,8 +489,10 @@ func main() {
 						Name:  "package",
 						Usage: "Test the package",
 						Action: func(c *cli.Context) error {
-							HandleTests("package")
-							fmt.Println("Package test completed!")
+							if err := HandleTests("package"); err != nil {
+								fmt.Printf("❌ Package tests failed: %v\n", err)
+								return err
+							}
 							return nil
 						},
 					},
