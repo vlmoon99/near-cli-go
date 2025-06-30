@@ -68,17 +68,20 @@ func ReadData() {
 
 	if detectedType != "object" {
 		env.ContractValueReturn([]byte("Error : Incorrect type" + "detected type is " + detectedType))
+		return
 	}
 	parser := json.NewParser(input)
 
 	keyResult, err := parser.GetString("key")
 	if err != nil {
 		env.ContractValueReturn([]byte("Error : Incorrect key"))
+		return
 	}
 
 	data, err := env.StorageRead([]byte(keyResult))
 	if err != nil {
 		env.ContractValueReturn([]byte("Error : Incorrect read from the storage by that key"))
+		return
 	}
 	env.LogString("ReadData was successful")
 
