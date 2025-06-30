@@ -94,7 +94,7 @@ func AcceptPayment() {
 	if err != nil {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
-	env.LogString("Attachet Deposit :" + attachedDeposit.String())
+	env.LogString("Attached Deposit :" + attachedDeposit.String())
 	promiseIdx := env.PromiseBatchCreate([]byte("neargoclitest.testnet"))
 	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
 	//neargocli.testnet
