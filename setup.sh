@@ -2,56 +2,57 @@
 
 set -e
 
-REPO="vlmoon99/near-cli-go"
-LATEST_URL="https://api.github.com/repos/$REPO/releases/latest"
 TOOLS_DIR="$(dirname "$0")/bindata/tools"
+NEAR_VERSION="v0.20.0"
 
-# Platforms to support
 PLATFORMS=(
-  "linux_amd64"
-  "linux_arm64"
-  "darwin_arm64"
+  "near-cli-rs-aarch64-apple-darwin.tar.gz darwin_arm64"
+  "near-cli-rs-x86_64-apple-darwin.tar.gz darwin_amd64"
+  "near-cli-rs-aarch64-unknown-linux-gnu.tar.gz linux_arm64"
+  "near-cli-rs-x86_64-unknown-linux-gnu.tar.gz linux_amd64"
 )
 
-echo "Fetching latest release info from GitHub..."
+BASE_URL="https://github.com/near/near-cli-rs/releases/download/${NEAR_VERSION}"
 
-# Fetch all release asset URLs once
-RELEASE_JSON=$(curl -s "$LATEST_URL")
+echo "Fetching NEAR CLI binaries from official releases..."
 
-for PLATFORM in "${PLATFORMS[@]}"; do
-  ZIP_NAME="${PLATFORM}_bins.zip"
-  PLATFORM_DIR="${TOOLS_DIR}/"
-  PLATFORM_BIN="${TOOLS_DIR}/${PLATFORM}"
+for entry in "${PLATFORMS[@]}"; do
+  set -- $entry
+  ARCHIVE="$1"
+  PLATFORM="$2"
+  URL="${BASE_URL}/${ARCHIVE}"
+  TARGET_DIR="${TOOLS_DIR}/${PLATFORM}"
 
   echo ""
-  echo "🔍 Setting up $PLATFORM..."
+  echo "🔍 Downloading $ARCHIVE for $PLATFORM from $URL"
+  mkdir -p "$TARGET_DIR"
+  TMP_TAR="/tmp/$ARCHIVE"
+  TMP_UNPACK_DIR="/tmp/near_unpack_${PLATFORM}_$$"
 
-  DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url" | grep "$ZIP_NAME" | cut -d '"' -f 4)
+  echo "  - Downloading archive to $TMP_TAR"
+  wget -q --show-progress -O "$TMP_TAR" "$URL"
 
-  if [ -z "$DOWNLOAD_URL" ]; then
-    echo "❌ Could not find release asset: $ZIP_NAME"
+  echo "  - Unpacking archive to $TMP_UNPACK_DIR"
+  mkdir -p "$TMP_UNPACK_DIR"
+  tar -xzf "$TMP_TAR" -C "$TMP_UNPACK_DIR"
+
+  NEAR_BIN_PATH=$(find "$TMP_UNPACK_DIR" -type f -name near -perm -u+x | head -n 1)
+
+  if [ -z "$NEAR_BIN_PATH" ]; then
+    echo "❌ 'near' binary not found in $ARCHIVE"
+    rm -rf "$TMP_UNPACK_DIR" "$TMP_TAR"
     continue
   fi
 
-  echo "✅ Found: $DOWNLOAD_URL"
+  echo "  - Found 'near' binary at $NEAR_BIN_PATH"
+  echo "  - Moving 'near' binary to $TARGET_DIR"
+  mv "$NEAR_BIN_PATH" "$TARGET_DIR/"
+  chmod +x "$TARGET_DIR/near"
 
-  mkdir -p "$PLATFORM_DIR"
-  TMP_ZIP="/tmp/$ZIP_NAME"
+  echo "✅ $PLATFORM ready at $TARGET_DIR/near"
 
-  echo "📥 Downloading $ZIP_NAME..."
-  curl -L "$DOWNLOAD_URL" -o "$TMP_ZIP"
-
-  echo "📦 Unzipping to $PLATFORM_DIR..."
-  unzip -o "$TMP_ZIP" -d "/tmp/unzipped_$PLATFORM"
-  mv "/tmp/unzipped_$PLATFORM"/* "$PLATFORM_DIR"
-  chmod +x "$PLATFORM_BIN"/*
-
-  echo "🧹 Cleaning up..."
-  rm -rf "$TMP_ZIP" "/tmp/unzipped_$PLATFORM"
-
-  echo "✅ Done: $PLATFORM"
+  rm -rf "$TMP_UNPACK_DIR" "$TMP_TAR"
 done
 
 echo ""
-echo "🎉 All platform binaries are ready in $TOOLS_DIR"
-
+echo "🎉 All NEAR CLI binaries are ready in $TOOLS_DIR"
