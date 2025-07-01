@@ -8,16 +8,6 @@ Before using the `near-go` CLI, ensure you have the following tools installed on
 ⚠️ **If any of these tools are missing, you won't be able to use the full functionality of the `near-go` CLI.**  
 This CLI acts as a proxy to `TinyGo`.  
 
----
-
-# Setup repo for development
-```bash
-bash setup.sh
-```
-
-This script installs all internal bins to the  ```/near-cli-go/bindata/tools```
-
-
 
 # NEAR CLI Go
 
@@ -174,3 +164,47 @@ COMMANDS:
 GLOBAL OPTIONS:
    --help, -h  show help
 ```
+
+
+---
+
+
+# Development Setup & Building from Source
+
+If you want to contribute to this project, follow these steps to set up your environment and build the CLI from source.
+
+## 1. Setup Repository for Development
+
+Run the following script to download and install all required internal binaries:
+
+```bash
+bash setup.sh
+```
+
+This will fetch the necessary NEAR CLI binaries and place them in:
+
+```
+/near-cli-go/bindata/tools
+```
+
+## 2. Build near-go from Source
+
+To build the CLI for all supported platforms and architectures, run:
+
+```bash
+bash build.sh
+```
+
+This script will:
+
+- Build the CLI for:
+  - **Linux** (`amd64` and `arm64`)
+  - **macOS** (`amd64` and `arm64`)
+- Output binaries named according to their platform and architecture (e.g., `near-cli-linux-amd64`).
+- Zip each binary for easy distribution (e.g., `near-cli-linux-amd64.zip`).
+
+After running the script, you will find the zipped binaries in the project directory, ready for distribution or testing.
+
+---
+
+**Now you are ready to contribute!**
