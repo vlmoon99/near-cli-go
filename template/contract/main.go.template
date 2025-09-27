@@ -90,7 +90,7 @@ func ReadData() {
 
 //go:export AcceptPayment
 func AcceptPayment() {
-	attachedDeposit, err := env.GetAttachedDepoist()
+	attachedDeposit, err := env.GetAttachedDeposit()
 	if err != nil {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
@@ -120,7 +120,7 @@ func ReadIncommingTxData() {
 	env.LogString("Contract input (raw bytes): " + string(input))
 	env.LogString("Detected input type: " + detectedType)
 
-	attachedDeposit, err := env.GetAttachedDepoist()
+	attachedDeposit, err := env.GetAttachedDeposit()
 	if err != nil {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
