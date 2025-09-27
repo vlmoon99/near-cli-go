@@ -41,7 +41,7 @@ const (
 )
 
 const (
-	NearSdkGoVersion = "v0.0.12"
+	NearSdkGoVersion = "v0.0.13"
 )
 
 const (
