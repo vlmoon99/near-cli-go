@@ -1,0 +1,17 @@
+package main
+
+// @contract:state
+type Contract struct {
+	Message string
+}
+
+// @contract:public
+func (c *Contract) GetMessage() string {
+	return c.Message
+}
+
+// @contract:public
+// @contract:mutating
+func (c *Contract) SetMessage(newMessage string) {
+	c.Message = newMessage
+}
