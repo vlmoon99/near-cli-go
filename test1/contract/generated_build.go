@@ -4,14 +4,13 @@
 package main
 
 import (
-	encodingJson "encoding/json"
-	"strconv"
 	"test1/a"
-
-	"github.com/vlmoon99/near-sdk-go/borsh"
 	contractBuilder "github.com/vlmoon99/near-sdk-go/contract"
 	"github.com/vlmoon99/near-sdk-go/env"
+	"github.com/vlmoon99/near-sdk-go/borsh"
 	"github.com/vlmoon99/near-sdk-go/types"
+	encodingJson "encoding/json"
+	"strconv"
 )
 
 // ===== From: main.go =====
@@ -47,7 +46,6 @@ func getState() *Contract {
 	}
 	return &state
 }
-
 func setState(state *Contract) {
 	val, err := borsh.Serialize(state)
 	if err != nil {
@@ -58,18 +56,16 @@ func setState(state *Contract) {
 		env.PanicStr("Failed to write state")
 	}
 }
-
 // ===== Generated Exports =====
 // Export: init (from main.go)
-//
 //go:export init
 func init() {
 	contractBuilder.HandleClientJSONInput(func(input *contractBuilder.ContractInput) error {
-		// // Initialization: Check if already initialized
-		// existingVal, _ := env.StateRead()
-		// if len(existingVal) > 0 {
-		// 	env.PanicStr("Contract already initialized")
-		// }
+		// Initialization: Check if already initialized
+		existingVal, _ := env.StateRead()
+		if len(existingVal) > 0 {
+			env.PanicStr("Contract already initialized")
+		}
 		state := defaultInit()
 
 		// Parse input parameters from JSON
@@ -94,7 +90,6 @@ func init() {
 }
 
 // Export: get_message (from main.go)
-//
 //go:export get_message
 func get_message() {
 	contractBuilder.HandleClientJSONInput(func(input *contractBuilder.ContractInput) error {
@@ -115,7 +110,6 @@ func get_message() {
 }
 
 // Export: set_message (from main.go)
-//
 //go:export set_message
 func set_message() {
 	contractBuilder.HandleClientJSONInput(func(input *contractBuilder.ContractInput) error {
@@ -136,7 +130,8 @@ func set_message() {
 
 		setState(state)
 
-		contractBuilder.ReturnValue(string("OK"))
+		successJSON, _ := encodingJson.Marshal(map[string]string{"status": "success"})
+		contractBuilder.ReturnValue(string(successJSON))
 		return nil
 	})
 }

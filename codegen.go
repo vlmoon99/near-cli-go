@@ -438,7 +438,7 @@ func generateGetState(state *StateInfo) string {
 		env.PanicStr("Failed to deserialize state")
 	}
 	return &state
-}`, state.Name, state.Name, state.Name)
+}`, state.Name, state.Name)
 }
 
 func generateSetState(state *StateInfo) string {

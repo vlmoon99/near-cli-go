@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Sat Dec 20 18:51:25 UTC 2025
+### Generated at: Sun Dec 21 18:24:59 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -10,19 +10,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-// HandleBuild orchestrates the build process:
-// 1. Scans the source directory for contract code.
-// 2. Uses the codegen package to generate unified Go code.
-// 3. Writes the generated code to a temporary file.
-// 4. Compiles the temporary file using TinyGo.
-// 5. Cleans up the temporary file.
+// HandleBuild orchestrates the build process
 func HandleBuild(sourceDir, outputName string) error {
-	fmt.Printf("DEBUG: HandleBuild called with source='%s', output='%s'\n", sourceDir, outputName)
+	// 1. Resolve Absolute Paths to avoid confusion when changing directories
+	absSourceDir, err := filepath.Abs(sourceDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path of source: %w", err)
+	}
 
-	// Set default output name if not provided or ensure it ends with .wasm
+	// Default output name handling
 	if outputName == "" {
 		outputName = "main.wasm"
 	}
@@ -30,51 +30,59 @@ func HandleBuild(sourceDir, outputName string) error {
 		outputName += ".wasm"
 	}
 
-	fmt.Printf("🔍 Scanning project in: %s\n", sourceDir)
-	// Use the GenerateCode function from the codegen package
-	generatedCode, err := GenerateCode(sourceDir)
+	absOutputName, err := filepath.Abs(outputName)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path of output: %w", err)
+	}
+
+	fmt.Printf("DEBUG: HandleBuild context\n  Source: %s\n  Output: %s\n", absSourceDir, absOutputName)
+
+	fmt.Printf("🔍 Scanning project in: %s\n", absSourceDir)
+	generatedCode, err := GenerateCode(absSourceDir)
 	if err != nil {
 		fmt.Printf("DEBUG: GenerateCode returned error: %v\n", err)
 		return fmt.Errorf("code generation failed: %w", err)
 	}
 
-	tmpFile := "generated_build.go" // Temporary file for the generated code
+	// The temporary file will be created INSIDE the source directory
+	tmpFileName := "generated_build.go"
+	tmpFilePath := filepath.Join(absSourceDir, tmpFileName)
+
 	fmt.Println("📝 Writing intermediate build file...")
-	if err := WriteToFile(tmpFile, generatedCode); err != nil {
-		return fmt.Errorf("failed to write generated file '%s': %w", tmpFile, err)
+	if err := WriteToFile(tmpFilePath, generatedCode); err != nil {
+		return fmt.Errorf("failed to write generated file '%s': %w", tmpFilePath, err)
 	}
 
-	// --- Temporary File Cleanup ---
-	// The user requested to KEEP this file for analysis for now.
-	// If you want to delete it automatically after build, uncomment the defer block below.
+	// // --- Temporary File Cleanup ---
+	// // COMMENT OUT this block to keep the generated file for debugging/analysis
 	// defer func() {
-	// 	fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFile)
-	// 	if err := os.Remove(tmpFile); err != nil {
-	// 		fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFile, err)
+	// 	fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFilePath)
+	// 	if err := os.Remove(tmpFilePath); err != nil {
+	// 		fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFilePath, err)
 	// 	}
 	// }()
-	fmt.Printf("ℹ️  Temporary generated file '%s' kept for analysis.\n", tmpFile)
+	// // ------------------------------
 
 	// --- TinyGo Compilation ---
-	// Arguments for TinyGo build command
 	args := []string{
-		"build", "-size", "short", "-no-debug", // Standard build flags
-		"-o", outputName, // Output file name
-		"-target", "wasm-unknown", // Target platform
-		tmpFile, // The file to compile
+		"build", "-size", "short", "-no-debug",
+		"-o", absOutputName, // Use absolute path for output so it writes to the correct place
+		"-target", "wasm-unknown",
+		tmpFileName, // Just the filename, because we will run command INSIDE absSourceDir
 	}
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
-	// Execute TinyGo with retry logic
-	if err := ExecuteWithRetry("tinygo", args, 2, os.Getenv("DEBUG") != ""); err != nil {
+
+	// Execute TinyGo inside the contract directory
+	// passing absSourceDir as the 'dir' argument
+	if err := ExecuteWithRetry("tinygo", args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
 		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
 		return err
 	}
 
 	// --- Verification ---
-	// Check if the output WASM file was created
-	if _, err := os.Stat(outputName); os.IsNotExist(err) {
-		return fmt.Errorf("%s: output file '%s' not found after build", ErrWasmNotFound, outputName)
+	if _, err := os.Stat(absOutputName); os.IsNotExist(err) {
+		return fmt.Errorf("%s: output file '%s' not found after build", ErrWasmNotFound, absOutputName)
 	}
 
 	fmt.Printf("✅ Build completed successfully: %s\n", outputName)
@@ -83,16 +91,17 @@ func HandleBuild(sourceDir, outputName string) error {
 
 // HandleTests runs the tests for the smart contract.
 func HandleTests(testType string) error {
-	target := "./..." // Default to project-wide tests
+	target := "./..."
 	if testType == "package" {
-		target = "./" // Test only the current package
+		target = "./"
 	} else if testType != "project" {
 		return fmt.Errorf("invalid test type provided: '%s'. Use 'project' or 'package'.", testType)
 	}
 
 	fmt.Printf("🧪 Running %s tests...\n", testType)
-	// Execute TinyGo test command with retry logic
-	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), 2, true); err != nil {
+
+	// Pass "" as dir to run in current working directory
+	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), "", 2, true); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
 
@@ -129,6 +138,7 @@ type MethodInfo struct {
 	IsView       bool
 	IsMutating   bool
 	IsPayable    bool
+	IsInit       bool // Tracks @contract:init
 	MinDeposit   string
 	FilePath     string
 	RelativePath string
@@ -184,7 +194,7 @@ func GenerateCode(rootDir string) (string, error) {
 func countPublicMethods(methods []*MethodInfo) int {
 	count := 0
 	for _, m := range methods {
-		if m.IsPublic {
+		if m.IsPublic || m.IsInit {
 			count++
 		}
 	}
@@ -227,9 +237,8 @@ func parseAllFilesRecursive(rootDir string) ([]*MethodInfo, []*StateInfo, []*Fil
 			return nil
 		}
 
-		// Log if we found anything interesting
-		if len(methods) > 0 || len(states) > 0 {
-			fmt.Printf("DEBUG: Parsed %s -> Found %d methods, %d states\n", relPath, len(methods), len(states))
+		if content == nil {
+			return nil
 		}
 
 		if len(methods) > 0 {
@@ -258,6 +267,10 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 	file, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+
+	if file.Name.Name != "main" {
+		return nil, nil, nil, nil
 	}
 
 	var methods []*MethodInfo
@@ -292,7 +305,6 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 						continue
 					}
 
-					// Check annotations on type declaration or spec
 					isState := false
 					if d.Doc != nil && hasStateAnnotation(d.Doc) {
 						isState = true
@@ -324,8 +336,7 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 				method.FilePath = filePath
 				method.RelativePath = relativePath
 
-				// Only keep if it has annotations
-				if method.IsPublic || method.IsView || method.IsMutating || method.IsPayable || method.IsPrivate {
+				if method.IsPublic || method.IsView || method.IsMutating || method.IsPayable || method.IsPrivate || method.IsInit {
 					methods = append(methods, method)
 				}
 			}
@@ -415,6 +426,10 @@ func parseAnnotation(text string, method *MethodInfo) {
 		return
 	}
 	switch parts[0] {
+	case "init":
+		method.IsInit = true
+		method.IsMutating = true // Init is always mutating
+		method.IsPublic = true   // Init is always public
 	case "public":
 		method.IsPublic = true
 	case "private":
@@ -483,7 +498,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	}
 	sb.WriteString(")\n\n")
 
-	// 1. Declarations from user files
+	// 1. Declarations
 	for _, content := range fileContents {
 		sb.WriteString(fmt.Sprintf("// ===== From: %s =====\n", content.RelativePath))
 		for _, decl := range content.Declarations {
@@ -495,22 +510,20 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	// 2. State helpers
 	if len(stateStructs) > 0 {
 		state := stateStructs[0]
+		sb.WriteString(generateDefaultInit(state))
+		sb.WriteString("\n")
 		sb.WriteString(generateGetState(state))
 		sb.WriteString("\n")
 		sb.WriteString(generateSetState(state))
 		sb.WriteString("\n")
 	}
 
-	// 3. Exported functions (The fix: Removed the check that skipped same-file methods)
+	// 3. Exported functions
 	sb.WriteString("// ===== Generated Exports =====\n")
 	for _, m := range methods {
-		if !m.IsPublic {
+		if !m.IsPublic && !m.IsInit {
 			continue
 		}
-
-		// NOTE: Logic that skipped methods in the same file as state struct has been REMOVED.
-		// All public methods will now generate an export wrapper.
-
 		sb.WriteString(generateExportFunction(m, stateStructs))
 		sb.WriteString("\n")
 	}
@@ -523,11 +536,18 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	return sb.String()
 }
 
+// Generates the default zero-value init function
+func generateDefaultInit(state *StateInfo) string {
+	return fmt.Sprintf(`func defaultInit() *%s {
+	return &%s{}
+}`, state.Name, state.Name)
+}
+
 func generateGetState(state *StateInfo) string {
 	return fmt.Sprintf(`func getState() *%s {
 	val, err := env.StateRead()
 	if err != nil || len(val) == 0 {
-		return &%s{}
+		return defaultInit()
 	}
 	var state %s
 	err = borsh.Deserialize(val, &state)
@@ -583,7 +603,19 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(fmt.Sprintf("func %s() {\n", exportName))
 	sb.WriteString("\tcontractBuilder.HandleClientJSONInput(func(input *contractBuilder.ContractInput) error {\n")
 
-	sb.WriteString("\t\tstate := getState()\n\n")
+	// If it is an @contract:init method, we must ensure state does NOT exist
+	if m.IsInit {
+		sb.WriteString("\t\t// Initialization: Check if already initialized\n")
+		sb.WriteString("\t\texistingVal, _ := env.StateRead()\n")
+		sb.WriteString("\t\tif len(existingVal) > 0 {\n")
+		sb.WriteString("\t\t\tenv.PanicStr(\"Contract already initialized\")\n")
+		sb.WriteString("\t\t}\n")
+		// For init, we start with a clean default state to run the method on
+		sb.WriteString("\t\tstate := defaultInit()\n\n")
+	} else {
+		// Normal method: load state (or get default if missing)
+		sb.WriteString("\t\tstate := getState()\n\n")
+	}
 
 	if m.IsPayable {
 		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", m.MinDeposit))
@@ -1119,10 +1151,16 @@ func ExecuteCommand(name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-func ExecuteWithRetry(name string, args []string, retries int, debug bool) error {
+func ExecuteWithRetry(name string, args []string, dir string, retries int, debug bool) error {
 	var lastErr error
 	for i := range retries {
 		cmd := exec.Command(name, args...)
+
+		// Set the working directory if provided
+		if dir != "" {
+			cmd.Dir = dir
+		}
+
 		output, err := cmd.CombinedOutput()
 		if err == nil {
 			if debug {
