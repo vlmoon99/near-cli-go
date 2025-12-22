@@ -4,12 +4,12 @@
 package main
 
 import (
-	"test1/a"
 	contractBuilder "github.com/vlmoon99/near-sdk-go/contract"
 	"github.com/vlmoon99/near-sdk-go/env"
 	"github.com/vlmoon99/near-sdk-go/types"
 	encodingJson "encoding/json"
 	"strconv"
+	"test1/a"
 )
 
 // ===== From: main.go =====
