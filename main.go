@@ -38,17 +38,20 @@ func main() {
 					&cli.StringFlag{
 						Name:  "source, s",
 						Usage: "Source directory to scan for smart contract code",
-						Value: "./", // Default to current directory
+						Value: "./",
 					},
 					&cli.StringFlag{
 						Name:  "output, o",
 						Usage: "Output filename for the WASM binary",
-						Value: "main.wasm", // Default output name
+						Value: "main.wasm",
+					},
+					&cli.BoolFlag{
+						Name:  "keep-generated, k",
+						Usage: "Keep the generated intermediate Go file (generated_build.go) after build",
 					},
 				},
 				Action: func(c *cli.Context) error {
-					// Call HandleBuild from builder.go, passing source and output flags
-					return HandleBuild(c.String("source"), c.String("output"))
+					return HandleBuild(c.String("source"), c.String("output"), c.Bool("keep-generated"))
 				},
 			},
 			{
@@ -100,15 +103,13 @@ func main() {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "contract-id, id", Required: true},
 					&cli.StringFlag{Name: "network, n", Required: true},
-					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"}, // Added file flag
+					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"},
 				},
 				Action: func(c *cli.Context) error {
 					id, net := c.String("contract-id"), c.String("network")
 					if id == "" || net == "" {
 						return errors.New(ErrProvidedNetworkAndContractId)
 					}
-					// Note: HandleDeployContract currently uses a hardcoded "./main.wasm".
-					// You would need to update HandleDeployContract in near.go to accept the file path if needed.
 					return HandleDeployContract(id, net)
 				},
 			},

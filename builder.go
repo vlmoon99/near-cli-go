@@ -7,15 +7,12 @@ import (
 	"strings"
 )
 
-// HandleBuild orchestrates the build process
-func HandleBuild(sourceDir, outputName string) error {
-	// 1. Resolve Absolute Paths to avoid confusion when changing directories
+func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 	absSourceDir, err := filepath.Abs(sourceDir)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path of source: %w", err)
 	}
 
-	// Default output name handling
 	if outputName == "" {
 		outputName = "main.wasm"
 	}
@@ -37,7 +34,6 @@ func HandleBuild(sourceDir, outputName string) error {
 		return fmt.Errorf("code generation failed: %w", err)
 	}
 
-	// The temporary file will be created INSIDE the source directory
 	tmpFileName := "generated_build.go"
 	tmpFilePath := filepath.Join(absSourceDir, tmpFileName)
 
@@ -46,34 +42,31 @@ func HandleBuild(sourceDir, outputName string) error {
 		return fmt.Errorf("failed to write generated file '%s': %w", tmpFilePath, err)
 	}
 
-	// // --- Temporary File Cleanup ---
-	// // COMMENT OUT this block to keep the generated file for debugging/analysis
-	// defer func() {
-	// 	fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFilePath)
-	// 	if err := os.Remove(tmpFilePath); err != nil {
-	// 		fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFilePath, err)
-	// 	}
-	// }()
-	// // ------------------------------
+	defer func() {
+		if !keepGenerated {
+			fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFilePath)
+			if err := os.Remove(tmpFilePath); err != nil {
+				fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFilePath, err)
+			}
+		} else {
+			fmt.Printf("💾 Kept generated file: %s\n", tmpFilePath)
+		}
+	}()
 
-	// --- TinyGo Compilation ---
 	args := []string{
 		"build", "-size", "short", "-no-debug",
-		"-o", absOutputName, // Use absolute path for output so it writes to the correct place
+		"-o", absOutputName,
 		"-target", "wasm-unknown",
-		tmpFileName, // Just the filename, because we will run command INSIDE absSourceDir
+		tmpFileName,
 	}
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
 
-	// Execute TinyGo inside the contract directory
-	// passing absSourceDir as the 'dir' argument
 	if err := ExecuteWithRetry("tinygo", args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
 		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
 		return err
 	}
 
-	// --- Verification ---
 	if _, err := os.Stat(absOutputName); os.IsNotExist(err) {
 		return fmt.Errorf("%s: output file '%s' not found after build", ErrWasmNotFound, absOutputName)
 	}
@@ -82,7 +75,6 @@ func HandleBuild(sourceDir, outputName string) error {
 	return nil
 }
 
-// HandleTests runs the tests for the smart contract.
 func HandleTests(testType string) error {
 	target := "./..."
 	if testType == "package" {
@@ -93,7 +85,6 @@ func HandleTests(testType string) error {
 
 	fmt.Printf("🧪 Running %s tests...\n", testType)
 
-	// Pass "" as dir to run in current working directory
 	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), "", 2, true); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}

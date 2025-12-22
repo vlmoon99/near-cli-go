@@ -1,9 +1,5 @@
 package main
 
-import (
-	"test1/a"
-)
-
 // @contract:state
 type Contract struct {
 	Message string
@@ -16,8 +12,7 @@ func (c *Contract) Init(msg string) {
 
 // @contract:public
 func (c *Contract) GetMessage() string {
-	msg := a.Hello()
-	return c.Message + " " + msg
+	return c.Message
 }
 
 // @contract:public
