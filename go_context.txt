@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Sun Dec 21 18:24:59 UTC 2025
+### Generated at: Mon Dec 22 11:24:40 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -555,7 +555,7 @@ func generateGetState(state *StateInfo) string {
 		env.PanicStr("Failed to deserialize state")
 	}
 	return &state
-}`, state.Name, state.Name, state.Name)
+}`, state.Name, state.Name)
 }
 
 func generateSetState(state *StateInfo) string {
