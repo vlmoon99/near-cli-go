@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Mon Dec 22 11:24:40 UTC 2025
+### Generated at: Wed Dec 24 19:49:39 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -14,15 +14,12 @@ import (
 	"strings"
 )
 
-// HandleBuild orchestrates the build process
-func HandleBuild(sourceDir, outputName string) error {
-	// 1. Resolve Absolute Paths to avoid confusion when changing directories
+func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 	absSourceDir, err := filepath.Abs(sourceDir)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path of source: %w", err)
 	}
 
-	// Default output name handling
 	if outputName == "" {
 		outputName = "main.wasm"
 	}
@@ -44,7 +41,6 @@ func HandleBuild(sourceDir, outputName string) error {
 		return fmt.Errorf("code generation failed: %w", err)
 	}
 
-	// The temporary file will be created INSIDE the source directory
 	tmpFileName := "generated_build.go"
 	tmpFilePath := filepath.Join(absSourceDir, tmpFileName)
 
@@ -53,34 +49,31 @@ func HandleBuild(sourceDir, outputName string) error {
 		return fmt.Errorf("failed to write generated file '%s': %w", tmpFilePath, err)
 	}
 
-	// // --- Temporary File Cleanup ---
-	// // COMMENT OUT this block to keep the generated file for debugging/analysis
-	// defer func() {
-	// 	fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFilePath)
-	// 	if err := os.Remove(tmpFilePath); err != nil {
-	// 		fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFilePath, err)
-	// 	}
-	// }()
-	// // ------------------------------
+	defer func() {
+		if !keepGenerated {
+			fmt.Printf("🧹 Cleaning up temporary file: %s\n", tmpFilePath)
+			if err := os.Remove(tmpFilePath); err != nil {
+				fmt.Printf("⚠️ Warning: Failed to clean up temporary file '%s': %v\n", tmpFilePath, err)
+			}
+		} else {
+			fmt.Printf("💾 Kept generated file: %s\n", tmpFilePath)
+		}
+	}()
 
-	// --- TinyGo Compilation ---
 	args := []string{
 		"build", "-size", "short", "-no-debug",
-		"-o", absOutputName, // Use absolute path for output so it writes to the correct place
+		"-o", absOutputName,
 		"-target", "wasm-unknown",
-		tmpFileName, // Just the filename, because we will run command INSIDE absSourceDir
+		tmpFileName,
 	}
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
 
-	// Execute TinyGo inside the contract directory
-	// passing absSourceDir as the 'dir' argument
 	if err := ExecuteWithRetry("tinygo", args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
 		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
 		return err
 	}
 
-	// --- Verification ---
 	if _, err := os.Stat(absOutputName); os.IsNotExist(err) {
 		return fmt.Errorf("%s: output file '%s' not found after build", ErrWasmNotFound, absOutputName)
 	}
@@ -89,7 +82,6 @@ func HandleBuild(sourceDir, outputName string) error {
 	return nil
 }
 
-// HandleTests runs the tests for the smart contract.
 func HandleTests(testType string) error {
 	target := "./..."
 	if testType == "package" {
@@ -100,7 +92,6 @@ func HandleTests(testType string) error {
 
 	fmt.Printf("🧪 Running %s tests...\n", testType)
 
-	// Pass "" as dir to run in current working directory
 	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), "", 2, true); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
@@ -125,9 +116,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
-// MethodInfo holds parsed method information
 type MethodInfo struct {
 	Name         string
 	ReceiverType string
@@ -138,7 +129,7 @@ type MethodInfo struct {
 	IsView       bool
 	IsMutating   bool
 	IsPayable    bool
-	IsInit       bool // Tracks @contract:init
+	IsInit       bool
 	MinDeposit   string
 	FilePath     string
 	RelativePath string
@@ -150,7 +141,6 @@ type Param struct {
 	Type string
 }
 
-// StateInfo holds contract state struct information
 type StateInfo struct {
 	Name         string
 	Fields       []FieldInfo
@@ -164,7 +154,6 @@ type FieldInfo struct {
 	Type string
 }
 
-// FileContent holds all declarations from a file
 type FileContent struct {
 	FilePath     string
 	RelativePath string
@@ -173,7 +162,6 @@ type FileContent struct {
 	IsStateFile  bool
 }
 
-// GenerateCode scans the directory and generates the Go code
 func GenerateCode(rootDir string) (string, error) {
 	fmt.Printf("DEBUG: CodeGen scanning directory: %s\n", rootDir)
 
@@ -194,7 +182,7 @@ func GenerateCode(rootDir string) (string, error) {
 func countPublicMethods(methods []*MethodInfo) int {
 	count := 0
 	for _, m := range methods {
-		if m.IsPublic || m.IsInit {
+		if (m.IsPublic || m.IsInit) && !m.IsPrivate {
 			count++
 		}
 	}
@@ -428,18 +416,21 @@ func parseAnnotation(text string, method *MethodInfo) {
 	switch parts[0] {
 	case "init":
 		method.IsInit = true
-		method.IsMutating = true // Init is always mutating
-		method.IsPublic = true   // Init is always public
+		method.IsMutating = true
+		method.IsPublic = true
 	case "public":
 		method.IsPublic = true
 	case "private":
 		method.IsPrivate = true
 	case "view":
 		method.IsView = true
+		method.IsPublic = true
 	case "mutating":
 		method.IsMutating = true
+		method.IsPublic = true
 	case "payable":
 		method.IsPayable = true
+		method.IsPublic = true
 		for _, part := range parts[1:] {
 			if strings.HasPrefix(part, "min_deposit=") {
 				method.MinDeposit = strings.TrimPrefix(part, "min_deposit=")
@@ -470,15 +461,13 @@ func typeToString(expr ast.Expr) string {
 func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents []*FileContent) string {
 	var sb strings.Builder
 
-	// Header
 	sb.WriteString("// Code generated by NEAR contract generator. DO NOT EDIT.\n")
-	sb.WriteString("// This file uses encoding/json for parameter parsing instead of Borsh.\n\n")
+	sb.WriteString("// This file uses encoding/json for both state serialization and parameter parsing.\n\n")
 	sb.WriteString("package main\n\n")
 
 	importMap := make(map[string]bool)
 	importMap["contractBuilder \"github.com/vlmoon99/near-sdk-go/contract\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
-	importMap["\"github.com/vlmoon99/near-sdk-go/borsh\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
 	importMap["\"strconv\""] = true
@@ -498,7 +487,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	}
 	sb.WriteString(")\n\n")
 
-	// 1. Declarations
 	for _, content := range fileContents {
 		sb.WriteString(fmt.Sprintf("// ===== From: %s =====\n", content.RelativePath))
 		for _, decl := range content.Declarations {
@@ -507,7 +495,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		}
 	}
 
-	// 2. State helpers
 	if len(stateStructs) > 0 {
 		state := stateStructs[0]
 		sb.WriteString(generateDefaultInit(state))
@@ -518,9 +505,11 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		sb.WriteString("\n")
 	}
 
-	// 3. Exported functions
 	sb.WriteString("// ===== Generated Exports =====\n")
 	for _, m := range methods {
+		if m.IsPrivate {
+			continue
+		}
 		if !m.IsPublic && !m.IsInit {
 			continue
 		}
@@ -528,7 +517,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		sb.WriteString("\n")
 	}
 
-	// 4. Helper functions
 	sb.WriteString("// ===== Helper Functions =====\n")
 	sb.WriteString(generateValidatePayment())
 	sb.WriteString("\n")
@@ -536,7 +524,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	return sb.String()
 }
 
-// Generates the default zero-value init function
 func generateDefaultInit(state *StateInfo) string {
 	return fmt.Sprintf(`func defaultInit() *%s {
 	return &%s{}
@@ -550,7 +537,7 @@ func generateGetState(state *StateInfo) string {
 		return defaultInit()
 	}
 	var state %s
-	err = borsh.Deserialize(val, &state)
+	err = encodingJson.Unmarshal(val, &state)
 	if err != nil {
 		env.PanicStr("Failed to deserialize state")
 	}
@@ -560,7 +547,7 @@ func generateGetState(state *StateInfo) string {
 
 func generateSetState(state *StateInfo) string {
 	return fmt.Sprintf(`func setState(state *%s) {
-	val, err := borsh.Serialize(state)
+	val, err := encodingJson.Marshal(state)
 	if err != nil {
 		env.PanicStr("Failed to serialize state")
 	}
@@ -603,17 +590,14 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(fmt.Sprintf("func %s() {\n", exportName))
 	sb.WriteString("\tcontractBuilder.HandleClientJSONInput(func(input *contractBuilder.ContractInput) error {\n")
 
-	// If it is an @contract:init method, we must ensure state does NOT exist
 	if m.IsInit {
 		sb.WriteString("\t\t// Initialization: Check if already initialized\n")
 		sb.WriteString("\t\texistingVal, _ := env.StateRead()\n")
 		sb.WriteString("\t\tif len(existingVal) > 0 {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(\"Contract already initialized\")\n")
 		sb.WriteString("\t\t}\n")
-		// For init, we start with a clean default state to run the method on
 		sb.WriteString("\t\tstate := defaultInit()\n\n")
 	} else {
-		// Normal method: load state (or get default if missing)
 		sb.WriteString("\t\tstate := getState()\n\n")
 	}
 
@@ -646,7 +630,7 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 					sb.WriteString(", ")
 				}
 				sb.WriteString("params.")
-				sb.WriteString(p.Name)
+				sb.WriteString(capitalizeFirst(p.Name))
 			}
 		}
 	}
@@ -693,8 +677,9 @@ func generateParamParser(method *MethodInfo) string {
 	} else {
 		sb.WriteString("\t\tvar params struct {\n")
 		for _, p := range method.Params {
+			fieldName := capitalizeFirst(p.Name)
 			jsonTag := fmt.Sprintf("`json:\"%s\"`", p.Name)
-			sb.WriteString(fmt.Sprintf("\t\t\t%s %s %s\n", p.Name, p.Type, jsonTag))
+			sb.WriteString(fmt.Sprintf("\t\t\t%s %s %s\n", fieldName, p.Type, jsonTag))
 		}
 		sb.WriteString("\t\t}\n")
 
@@ -765,6 +750,369 @@ func toSnakeCase(s string) string {
 		result.WriteRune(r)
 	}
 	return strings.ToLower(result.String())
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return ""
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
+}
+
+
+
+==================================================
+FILE: codegen_test.go
+==================================================
+
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func setupTestProject(t *testing.T, content string) string {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "main.go")
+	err := os.WriteFile(filePath, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	return dir
+}
+
+func TestGenerateCode_StateSerialization(t *testing.T) {
+	contractCode := `
+package main
+
+// @contract:state
+type Contract struct {
+	Count int
+}
+`
+	dir := setupTestProject(t, contractCode)
+
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "encodingJson \"encoding/json\"") {
+		t.Errorf("Expected import encoding/json, but not found")
+	}
+
+	if !strings.Contains(generated, "encodingJson.Unmarshal(val, &state)") {
+		t.Errorf("Expected JSON Unmarshal for state in getState()")
+	}
+
+	if !strings.Contains(generated, "encodingJson.Marshal(state)") {
+		t.Errorf("Expected JSON Marshal for state in setState()")
+	}
+
+	if strings.Contains(generated, "borsh.Deserialize") {
+		t.Errorf("Found forbidden 'borsh.Deserialize' - State should use JSON")
+	}
+}
+
+func TestGenerateCode_ParameterCapitalization(t *testing.T) {
+	contractCode := `
+package main
+
+type Contract struct {}
+
+// @contract:mutating
+func (c *Contract) SendMessage(newMessage string, userId int, isActive bool) {
+	// logic
+}
+`
+	dir := setupTestProject(t, contractCode)
+
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	expectedStructField := "NewMessage string `json:\"newMessage\"`"
+	if !strings.Contains(generated, expectedStructField) {
+		t.Errorf("Expected capitalized struct field '%s', got code:\n%s", expectedStructField, generated)
+	}
+
+	expectedStructField2 := "UserId int `json:\"userId\"`"
+	if !strings.Contains(generated, expectedStructField2) {
+		t.Errorf("Expected capitalized struct field '%s'", expectedStructField2)
+	}
+
+	if !strings.Contains(generated, "params.NewMessage") {
+		t.Errorf("Expected usage 'params.NewMessage', not found")
+	}
+
+	if !strings.Contains(generated, "params.UserId") {
+		t.Errorf("Expected usage 'params.UserId', not found")
+	}
+}
+
+func TestGenerateCode_InitAndPayable(t *testing.T) {
+	contractCode := `
+package main
+
+type Contract struct {}
+
+// @contract:init
+// @contract:payable min_deposit=1NEAR
+func (c *Contract) InitContract(startMsg string) {}
+`
+	dir := setupTestProject(t, contractCode)
+
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "existingVal, _ := env.StateRead()") {
+		t.Errorf("Init method should check for existing state")
+	}
+	if !strings.Contains(generated, "state := defaultInit()") {
+		t.Errorf("Init method should start with defaultInit()")
+	}
+
+	if !strings.Contains(generated, "validatePayment(\"1NEAR\")") {
+		t.Errorf("Expected validation of payment '1NEAR'")
+	}
+}
+
+func TestGenerateCode_ComplexTypes(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:view
+func (c *Contract) UpdateList(items []string, data map[string]int) {}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "Items []string `json:\"items\"`") {
+		t.Errorf("Failed to generate capitalized struct for []string array")
+	}
+	if !strings.Contains(generated, "Data map[string]int `json:\"data\"`") {
+		t.Errorf("Failed to generate capitalized struct for map")
+	}
+}
+
+func TestGenerateCode_PrivateMethods(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:public
+func (c *Contract) PublicMethod() {}
+
+// @contract:private
+func (c *Contract) InternalHelper() {}
+
+// @contract:view
+func (c *Contract) ViewMethod() {}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "func public_method()") {
+		t.Errorf("Public method failed to export")
+	}
+	if !strings.Contains(generated, "func view_method()") {
+		t.Errorf("View method failed to export")
+	}
+
+	if strings.Contains(generated, "func internal_helper()") {
+		t.Errorf("SECURITY RISK: Private method was exported!")
+	}
+}
+
+func TestGenerateCode_ReturnValues(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:view
+func (c *Contract) GetStatus() (bool, string) {
+	return true, "ok"
+}
+
+// @contract:view
+func (c *Contract) GetMap() map[string]int {
+	return nil
+}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "resultJSON, err := encodingJson.Marshal(result)") {
+		t.Errorf("Expected result marshaling for return values")
+	}
+	if !strings.Contains(generated, "contractBuilder.ReturnValue(string(resultJSON))") {
+		t.Errorf("Expected contractBuilder.ReturnValue usage")
+	}
+}
+
+func TestGenerateCode_PreserveImports(t *testing.T) {
+	contractCode := `
+package main
+
+import (
+	"math/big"
+	"fmt"
+)
+
+type Contract struct {}
+
+// @contract:mutating
+func (c *Contract) BigMath(num *big.Int) {
+	fmt.Println("test")
+}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "\"math/big\"") {
+		t.Errorf("Failed to preserve 'math/big' import")
+	}
+	if !strings.Contains(generated, "\"fmt\"") {
+		t.Errorf("Failed to preserve 'fmt' import")
+	}
+}
+
+func TestGenerateCode_ReceiverNaming(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {
+	Val int
+}
+
+// @contract:mutating
+func (self *Contract) Increment() {
+	self.Val++
+}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "state.Increment()") {
+		t.Errorf("Method call generation failed for receiver named 'self'")
+	}
+}
+
+func TestGenerateCode_DangerousNames(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:mutating
+func (c *Contract) EdgeCaseNames(error string, input int, state bool, make []int, new string) {}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "Error string `json:\"error\"`") {
+		t.Errorf("Failed to generate field for 'error' param")
+	}
+	if !strings.Contains(generated, "Input int `json:\"input\"`") {
+		t.Errorf("Failed to generate field for 'input' param")
+	}
+	if !strings.Contains(generated, "State bool `json:\"state\"`") {
+		t.Errorf("Failed to generate field for 'state' param")
+	}
+	if !strings.Contains(generated, "Make []int `json:\"make\"`") {
+		t.Errorf("Failed to generate field for 'make' param")
+	}
+
+	if !strings.Contains(generated, "params.Error") {
+		t.Errorf("Method call should use params.Error")
+	}
+	if !strings.Contains(generated, "params.Input") {
+		t.Errorf("Method call should use params.Input")
+	}
+}
+
+func TestGenerateCode_PointerParameters(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:mutating
+func (c *Contract) Update(val *int, text *string) {}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "Val *int `json:\"val\"`") {
+		t.Errorf("Failed to generate pointer field for *int")
+	}
+	if !strings.Contains(generated, "params.Val") {
+		t.Errorf("Failed to pass pointer param")
+	}
+}
+
+func TestGenerateCode_ValueReceiver(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+
+// @contract:view
+func (c Contract) JustRead() {}
+`
+	dir := setupTestProject(t, contractCode)
+	generated, err := GenerateCode(dir)
+	if err != nil {
+		t.Fatalf("GenerateCode failed: %v", err)
+	}
+
+	if !strings.Contains(generated, "func just_read()") {
+		t.Errorf("Failed to generate export for value receiver method")
+	}
+}
+
+func TestGenerateCode_NoAnnotations(t *testing.T) {
+	contractCode := `
+package main
+type Contract struct {}
+func (c *Contract) RegularMethod() {}
+`
+	dir := setupTestProject(t, contractCode)
+
+	_, err := GenerateCode(dir)
+	if err == nil {
+		t.Errorf("Expected error when no @contract annotations are present, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "no methods or state structs") {
+		t.Errorf("Expected specific error message about missing annotations, got: %v", err)
+	}
 }
 
 
@@ -850,17 +1198,20 @@ func main() {
 					&cli.StringFlag{
 						Name:  "source, s",
 						Usage: "Source directory to scan for smart contract code",
-						Value: "./", // Default to current directory
+						Value: "./",
 					},
 					&cli.StringFlag{
 						Name:  "output, o",
 						Usage: "Output filename for the WASM binary",
-						Value: "main.wasm", // Default output name
+						Value: "main.wasm",
+					},
+					&cli.BoolFlag{
+						Name:  "keep-generated, k",
+						Usage: "Keep the generated intermediate Go file (generated_build.go) after build",
 					},
 				},
 				Action: func(c *cli.Context) error {
-					// Call HandleBuild from builder.go, passing source and output flags
-					return HandleBuild(c.String("source"), c.String("output"))
+					return HandleBuild(c.String("source"), c.String("output"), c.Bool("keep-generated"))
 				},
 			},
 			{
@@ -912,15 +1263,13 @@ func main() {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "contract-id, id", Required: true},
 					&cli.StringFlag{Name: "network, n", Required: true},
-					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"}, // Added file flag
+					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"},
 				},
 				Action: func(c *cli.Context) error {
 					id, net := c.String("contract-id"), c.String("network")
 					if id == "" || net == "" {
 						return errors.New(ErrProvidedNetworkAndContractId)
 					}
-					// Note: HandleDeployContract currently uses a hardcoded "./main.wasm".
-					// You would need to update HandleDeployContract in near.go to accept the file path if needed.
 					return HandleDeployContract(id, net)
 				},
 			},
@@ -1174,6 +1523,56 @@ func ExecuteWithRetry(name string, args []string, dir string, retries int, debug
 		}
 	}
 	return fmt.Errorf("%s: %v", ErrBuildFailed, lastErr)
+}
+
+
+
+==================================================
+FILE: utils_test.go
+==================================================
+
+package main
+
+import "testing"
+
+func TestCapitalizeFirst(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"message", "Message"},
+		{"newMessage", "NewMessage"},
+		{"a", "A"},
+		{"", ""},
+		{"AlreadyCap", "AlreadyCap"},
+		{"user_id", "User_id"},
+	}
+
+	for _, tt := range tests {
+		result := capitalizeFirst(tt.input)
+		if result != tt.expected {
+			t.Errorf("capitalizeFirst(%q) = %q; want %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestToSnakeCase(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"HelloWorld", "hello_world"},
+		{"Submit", "submit"},
+		{"PDFLoad", "p_d_f_load"},
+		{"myFunction", "my_function"},
+	}
+
+	for _, tt := range tests {
+		result := toSnakeCase(tt.input)
+		if result != tt.expected {
+			t.Errorf("toSnakeCase(%q) = %q; want %q", tt.input, result, tt.expected)
+		}
+	}
 }
 
 
