@@ -658,9 +658,16 @@ func isBasicType(typeStr string) bool {
 
 func toSnakeCase(s string) string {
 	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('_')
+	runes := []rune(s)
+	length := len(runes)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			if (unicode.IsLower(prev) || unicode.IsDigit(prev)) ||
+				(unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1])) {
+				result.WriteRune('_')
+			}
 		}
 		result.WriteRune(r)
 	}
