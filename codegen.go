@@ -405,7 +405,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		if !m.IsPublic && !m.IsInit {
 			continue
 		}
-		sb.WriteString(generateExportFunction(m, stateStructs))
+		sb.WriteString(generateExportFunction(m))
 		sb.WriteString("\n")
 	}
 
@@ -473,7 +473,7 @@ func generateValidatePayment() string {
 }`
 }
 
-func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
+func generateExportFunction(m *MethodInfo) string {
 	var sb strings.Builder
 
 	exportName := toSnakeCase(m.Name)
@@ -502,13 +502,11 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(generateParamParser(m))
 	sb.WriteString("\n")
 
-	// Determine return types
 	returnsError := false
 	if len(m.Returns) > 0 && m.Returns[len(m.Returns)-1] == "error" {
 		returnsError = true
 	}
 
-	// Determine if there is a data result (excluding the error)
 	hasDataResult := false
 	if returnsError {
 		if len(m.Returns) > 1 {
@@ -523,7 +521,6 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString("\t\t// Call method\n")
 	sb.WriteString("\t\t")
 
-	// Generate assignment based on return signature
 	if hasDataResult && returnsError {
 		sb.WriteString("result, callErr := ")
 	} else if hasDataResult {
@@ -551,28 +548,22 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	}
 	sb.WriteString(")\n\n")
 
-	// 1. Handle Error first
 	if returnsError {
 		sb.WriteString("\t\tif callErr != nil {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
 		sb.WriteString("\t\t}\n\n")
 	}
 
-	// 2. Save State (if mutating and no error occurred)
 	if m.IsMutating {
 		sb.WriteString("\t\tsetState(state)\n\n")
 	}
 
-	// 3. Handle Return Value
 	if hasDataResult {
 		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
 		sb.WriteString("\t\tif err != nil {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
 		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
-	} else {
-		sb.WriteString("\t\tsuccessJSON, _ := encodingJson.Marshal(map[string]string{\"status\": \"success\"})\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(successJSON))\n")
 	}
 
 	sb.WriteString("\t\treturn nil\n")
