@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Wed Dec 24 19:49:39 UTC 2025
+### Generated at: Fri Dec 26 16:49:45 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -282,7 +282,15 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			if d.Tok == token.IMPORT {
 				continue
 			}
+
+			// Start by assuming the declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:embed), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -315,7 +323,14 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			content.Declarations = append(content.Declarations, declCode)
 
 		case *ast.FuncDecl:
+			// Start by assuming the function declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:export), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -513,7 +528,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		if !m.IsPublic && !m.IsInit {
 			continue
 		}
-		sb.WriteString(generateExportFunction(m, stateStructs))
+		sb.WriteString(generateExportFunction(m))
 		sb.WriteString("\n")
 	}
 
@@ -581,7 +596,7 @@ func generateValidatePayment() string {
 }`
 }
 
-func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
+func generateExportFunction(m *MethodInfo) string {
 	var sb strings.Builder
 
 	exportName := toSnakeCase(m.Name)
@@ -610,11 +625,31 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(generateParamParser(m))
 	sb.WriteString("\n")
 
-	sb.WriteString("\t\t// Call method\n")
-	if len(m.Returns) > 0 {
-		sb.WriteString("\t\tresult := ")
+	returnsError := false
+	if len(m.Returns) > 0 && m.Returns[len(m.Returns)-1] == "error" {
+		returnsError = true
+	}
+
+	hasDataResult := false
+	if returnsError {
+		if len(m.Returns) > 1 {
+			hasDataResult = true
+		}
 	} else {
-		sb.WriteString("\t\t")
+		if len(m.Returns) > 0 {
+			hasDataResult = true
+		}
+	}
+
+	sb.WriteString("\t\t// Call method\n")
+	sb.WriteString("\t\t")
+
+	if hasDataResult && returnsError {
+		sb.WriteString("result, callErr := ")
+	} else if hasDataResult {
+		sb.WriteString("result := ")
+	} else if returnsError {
+		sb.WriteString("callErr := ")
 	}
 
 	sb.WriteString("state.")
@@ -636,19 +671,22 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	}
 	sb.WriteString(")\n\n")
 
+	if returnsError {
+		sb.WriteString("\t\tif callErr != nil {\n")
+		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
+		sb.WriteString("\t\t}\n\n")
+	}
+
 	if m.IsMutating {
 		sb.WriteString("\t\tsetState(state)\n\n")
 	}
 
-	if len(m.Returns) > 0 {
+	if hasDataResult {
 		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
 		sb.WriteString("\t\tif err != nil {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
 		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
-	} else {
-		sb.WriteString("\t\tsuccessJSON, _ := encodingJson.Marshal(map[string]string{\"status\": \"success\"})\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(successJSON))\n")
 	}
 
 	sb.WriteString("\t\treturn nil\n")
@@ -743,9 +781,16 @@ func isBasicType(typeStr string) bool {
 
 func toSnakeCase(s string) string {
 	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('_')
+	runes := []rune(s)
+	length := len(runes)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			if (unicode.IsLower(prev) || unicode.IsDigit(prev)) ||
+				(unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1])) {
+				result.WriteRune('_')
+			}
 		}
 		result.WriteRune(r)
 	}
@@ -1129,7 +1174,7 @@ import "embed"
 var templates embed.FS
 
 const (
-	NearSdkGoVersion = "v0.0.13"
+	NearSdkGoVersion = "v0.1.0"
 
 	SmartContractTypeProject   = "smart-contract-empty"
 	SmartContractProjectFolder = "contract"
@@ -1173,16 +1218,23 @@ func main() {
 	CheckDependencies()
 
 	app := &cli.App{
-		Name:  "near-go",
-		Usage: "CLI tool for managing projects on Near Blockchain",
+		Name:    "near-go",
+		Usage:   "CLI tool for managing projects on Near Blockchain",
+		Version: NearSdkGoVersion,
+		Authors: []cli.Author{
+			{Name: "Github : vlmoon99, Telegram : @vlmoon99"},
+		},
+		Description: "A comprehensive toolchain for scaffolding, building, testing, and deploying NEAR smart contracts written in Go. It utilizes TinyGo for WASM compilation and an annotation-based code generator for boilerplate reduction.",
 		Commands: []cli.Command{
 			{
 				Name:  "create",
-				Usage: "Create a new project",
+				Usage: "Scaffold a new smart contract project",
+				Description: "Creates a standard directory structure, initializes a go.mod file, " +
+					"and downloads the required NEAR Go SDK dependencies.",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "project-name, p", Required: true},
-					&cli.StringFlag{Name: "module-name, m", Required: true},
-					&cli.StringFlag{Name: "project-type, t", Required: true},
+					&cli.StringFlag{Name: "project-name, p", Required: true, Usage: "Name of the project folder to create"},
+					&cli.StringFlag{Name: "module-name, m", Required: true, Usage: "Go module name (e.g., github.com/user/project)"},
+					&cli.StringFlag{Name: "project-type, t", Required: true, Usage: "Type of project (e.g., smart-contract-empty)"},
 				},
 				Action: func(c *cli.Context) error {
 					if c.String("project-name") == "" || c.String("module-name") == "" {
@@ -1193,7 +1245,12 @@ func main() {
 			},
 			{
 				Name:  "build",
-				Usage: "Build the project",
+				Usage: "Compile the smart contract to WASM",
+				Description: "Executes the full build pipeline:\n" +
+					"   1. Scans source code for @contract annotations (state, methods).\n" +
+					"   2. Generates intermediate glue code ('generated_build.go') for JSON serialization and SDK integration.\n" +
+					"   3. Compiles the package using TinyGo targeting 'wasm-unknown'.\n" +
+					"   4. Cleans up generated artifacts.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "source, s",
@@ -1207,7 +1264,7 @@ func main() {
 					},
 					&cli.BoolFlag{
 						Name:  "keep-generated, k",
-						Usage: "Keep the generated intermediate Go file (generated_build.go) after build",
+						Usage: "Keep the intermediate 'generated_build.go' file for inspection/debugging",
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -1216,27 +1273,32 @@ func main() {
 			},
 			{
 				Name:  "test",
-				Usage: "Run tests",
+				Usage: "Run contract unit tests using TinyGo",
+				Description: "Executes Go tests using the TinyGo compiler to simulate the WASM environment constraints. " +
+					"This ensures dependencies and logic are compatible with the strict requirements of the NEAR runtime.",
 				Subcommands: []cli.Command{
 					{
 						Name:   "project",
+						Usage:  "Run tests recursively for the entire project (./...)",
 						Action: func(c *cli.Context) error { return HandleTests("project") },
 					},
 					{
 						Name:   "package",
+						Usage:  "Run tests only for the current directory (./)",
 						Action: func(c *cli.Context) error { return HandleTests("package") },
 					},
 				},
 			},
 			{
 				Name:  "account",
-				Usage: "Manage blockchain accounts",
+				Usage: "Manage NEAR blockchain accounts",
 				Subcommands: []cli.Command{
 					{
-						Name: "create",
+						Name:  "create",
+						Usage: "Create a new account (dev or testnet)",
 						Flags: []cli.Flag{
-							&cli.StringFlag{Name: "network, n", Required: true},
-							&cli.StringFlag{Name: "account-name, a"},
+							&cli.StringFlag{Name: "network, n", Required: true, Usage: "Network ID (testnet, mainnet, dev)"},
+							&cli.StringFlag{Name: "account-name, a", Usage: "Desired account name (required for non-dev networks)"},
 						},
 						Action: func(c *cli.Context) error {
 							net, name := c.String("network"), c.String("account-name")
@@ -1250,7 +1312,8 @@ func main() {
 						},
 					},
 					{
-						Name: "import",
+						Name:  "import",
+						Usage: "Import an existing account via private key",
 						Action: func(c *cli.Context) error {
 							return HandleImportAccount()
 						},
@@ -1259,11 +1322,11 @@ func main() {
 			},
 			{
 				Name:  "deploy",
-				Usage: "Deploy the project",
+				Usage: "Deploy a compiled WASM contract",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "contract-id, id", Required: true},
-					&cli.StringFlag{Name: "network, n", Required: true},
-					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"},
+					&cli.StringFlag{Name: "contract-id, id", Required: true, Usage: "Account ID to deploy the contract to"},
+					&cli.StringFlag{Name: "network, n", Required: true, Usage: "Network ID (testnet, mainnet)"},
+					&cli.StringFlag{Name: "file, f", Usage: "Path to WASM file", Value: "main.wasm"},
 				},
 				Action: func(c *cli.Context) error {
 					id, net := c.String("contract-id"), c.String("network")
@@ -1275,15 +1338,15 @@ func main() {
 			},
 			{
 				Name:  "call",
-				Usage: "Call a smart contract function",
+				Usage: "Invoke a method on a smart contract",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "signer, from", Required: true},
-					&cli.StringFlag{Name: "contract, to", Required: true},
-					&cli.StringFlag{Name: "method, function", Required: true},
-					&cli.StringFlag{Name: "args", Value: "{}"},
-					&cli.StringFlag{Name: "gas", Value: "100 Tgas"},
-					&cli.StringFlag{Name: "deposit", Value: "0 NEAR"},
-					&cli.StringFlag{Name: "network", Required: true},
+					&cli.StringFlag{Name: "signer, from", Required: true, Usage: "Account ID signing the transaction"},
+					&cli.StringFlag{Name: "contract, to", Required: true, Usage: "Contract Account ID"},
+					&cli.StringFlag{Name: "method, function", Required: true, Usage: "Method name to invoke"},
+					&cli.StringFlag{Name: "args", Value: "{}", Usage: "JSON arguments string"},
+					&cli.StringFlag{Name: "gas", Value: "100 Tgas", Usage: "Prepaid gas"},
+					&cli.StringFlag{Name: "deposit", Value: "0 NEAR", Usage: "Attached deposit"},
+					&cli.StringFlag{Name: "network", Required: true, Usage: "Network ID"},
 				},
 				Action: func(c *cli.Context) error {
 					return HandleCallFunction(
@@ -1378,13 +1441,13 @@ func HandleCreateProject(projectName, projectType, moduleName string) error {
 	}
 
 	fmt.Printf("🚀 Creating project '%s'...\n", projectName)
+
 	if err := CreateFolderAndNavigate(projectName); err != nil {
 		return err
 	}
 
 	if err := initializeSmartContract(moduleName); err != nil {
 		os.Chdir("..")
-		os.RemoveAll(projectName)
 		return err
 	}
 
@@ -1394,24 +1457,6 @@ func HandleCreateProject(projectName, projectType, moduleName string) error {
 func initializeSmartContract(moduleName string) error {
 	if err := CreateFolderAndNavigate(SmartContractProjectFolder); err != nil {
 		return err
-	}
-
-	fmt.Println("📦 Initializing Go module...")
-	if _, err := ExecuteCommand("go", "mod", "init", moduleName); err != nil {
-		return err
-	}
-
-	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
-		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
-	}
-
-	fmt.Println("📥 Downloading dependencies...")
-	if _, err := ExecuteCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
-		return err
-	}
-
-	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
-		return fmt.Errorf("%s", ErrGoProjectSumFileIsMissing)
 	}
 
 	fmt.Println("📝 Creating template...")
@@ -1424,9 +1469,29 @@ func initializeSmartContract(moduleName string) error {
 		return err
 	}
 
+	fmt.Println("📦 Initializing Go module...")
+	if _, err := ExecuteCommand("go", "mod", "init", moduleName); err != nil {
+		return fmt.Errorf("failed to init go module: %w", err)
+	}
+
+	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
+	}
+
+	fmt.Println("📥 Downloading dependencies...")
+	if _, err := ExecuteCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
+		fmt.Printf("⚠️ Warning: Failed to download dependencies: %v\n", err)
+		fmt.Println("   Please run 'go get ./...' manually inside the contract folder.")
+	} else {
+		if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
+			fmt.Println("⚠️ Warning: go.sum was not generated.")
+		}
+	}
+
 	fmt.Println("✅ Project created successfully!")
 	return nil
 }
+
 
 
 ==================================================
@@ -1563,7 +1628,7 @@ func TestToSnakeCase(t *testing.T) {
 	}{
 		{"HelloWorld", "hello_world"},
 		{"Submit", "submit"},
-		{"PDFLoad", "p_d_f_load"},
+		{"PDFLoad", "pdf_load"},
 		{"myFunction", "my_function"},
 	}
 

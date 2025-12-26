@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -174,7 +175,12 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			if d.Tok == token.IMPORT {
 				continue
 			}
+
 			startPos := fset.Position(d.Pos()).Offset
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -208,6 +214,10 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 
 		case *ast.FuncDecl:
 			startPos := fset.Position(d.Pos()).Offset
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -362,7 +372,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
-	importMap["\"strconv\""] = true
+	// Removed "strconv" as it's no longer needed for payment validation
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -405,7 +415,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		if !m.IsPublic && !m.IsInit {
 			continue
 		}
-		sb.WriteString(generateExportFunction(m, stateStructs))
+		sb.WriteString(generateExportFunction(m))
 		sb.WriteString("\n")
 	}
 
@@ -450,21 +460,22 @@ func generateSetState(state *StateInfo) string {
 }`, state.Name)
 }
 
+// generateValidatePayment creates a helper that uses Uint128 for precise comparison
+// It expects minDepositYoctoStr to be a valid integer string pre-calculated by the generator
 func generateValidatePayment() string {
-	return `func validatePayment(minDeposit string) bool {
-	minAmount, err := strconv.ParseFloat(minDeposit, 64)
+	return `func validatePayment(minDepositYoctoStr string) bool {
+	minRequired, err := types.U128FromString(minDepositYoctoStr)
 	if err != nil {
-		env.LogString("Invalid min deposit amount: " + minDeposit)
-		return false
-	}
-	minYocto := minAmount * 1e24
-	minYoctoStr := strconv.FormatFloat(minYocto, 'f', 0, 64)
-	minRequired, err := types.U128FromString(minYoctoStr)
-	if err != nil {
-		env.LogString("Failed to create Uint128: " + err.Error())
+		env.LogString("Invalid min deposit config: " + minDepositYoctoStr)
 		return false
 	}
 	attachedDeposit, err := env.GetAttachedDeposit()
+	if err != nil {
+		env.LogString("Failed to get attached deposit")
+		return false
+	}
+	
+	// Check if attachedDeposit < minRequired
 	if attachedDeposit.Cmp(minRequired) < 0 {
 		env.LogString("Insufficient payment")
 		return false
@@ -473,7 +484,39 @@ func generateValidatePayment() string {
 }`
 }
 
-func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
+func parseAmountToYocto(amount string) string {
+	amount = strings.TrimSpace(amount)
+	if amount == "" {
+		return "0"
+	}
+
+	// Calculate using big.Int/Float to avoid float issues in generated code
+	// We convert "1NEAR" -> 1 * 10^24
+
+	isNear := false
+	if strings.HasSuffix(amount, "NEAR") {
+		isNear = true
+		amount = strings.TrimSuffix(amount, "NEAR")
+	}
+
+	valFloat, _, err := big.ParseFloat(amount, 10, 256, big.ToNearestEven)
+	if err != nil {
+		fmt.Printf("⚠️ Warning: Failed to parse min_deposit '%s', defaulting to 0\n", amount)
+		return "0"
+	}
+
+	if isNear {
+		// Multiply by 1e24
+		multiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(24), nil))
+		valFloat.Mul(valFloat, multiplier)
+	}
+
+	// Convert to integer string
+	valInt, _ := valFloat.Int(nil)
+	return valInt.String()
+}
+
+func generateExportFunction(m *MethodInfo) string {
 	var sb strings.Builder
 
 	exportName := toSnakeCase(m.Name)
@@ -493,8 +536,11 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 		sb.WriteString("\t\tstate := getState()\n\n")
 	}
 
-	if m.IsPayable {
-		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", m.MinDeposit))
+	// Validate Payment Logic
+	if m.IsPayable && m.MinDeposit != "" {
+		// We pre-calculate the Yocto amount here in the generator to avoid float math in the contract
+		yoctoAmount := parseAmountToYocto(m.MinDeposit)
+		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", yoctoAmount))
 		sb.WriteString("\t\t\tenv.PanicStr(\"Insufficient payment\")\n")
 		sb.WriteString("\t\t}\n\n")
 	}
@@ -502,11 +548,31 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(generateParamParser(m))
 	sb.WriteString("\n")
 
-	sb.WriteString("\t\t// Call method\n")
-	if len(m.Returns) > 0 {
-		sb.WriteString("\t\tresult := ")
+	returnsError := false
+	if len(m.Returns) > 0 && m.Returns[len(m.Returns)-1] == "error" {
+		returnsError = true
+	}
+
+	hasDataResult := false
+	if returnsError {
+		if len(m.Returns) > 1 {
+			hasDataResult = true
+		}
 	} else {
-		sb.WriteString("\t\t")
+		if len(m.Returns) > 0 {
+			hasDataResult = true
+		}
+	}
+
+	sb.WriteString("\t\t// Call method\n")
+	sb.WriteString("\t\t")
+
+	if hasDataResult && returnsError {
+		sb.WriteString("result, callErr := ")
+	} else if hasDataResult {
+		sb.WriteString("result := ")
+	} else if returnsError {
+		sb.WriteString("callErr := ")
 	}
 
 	sb.WriteString("state.")
@@ -528,19 +594,22 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	}
 	sb.WriteString(")\n\n")
 
+	if returnsError {
+		sb.WriteString("\t\tif callErr != nil {\n")
+		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
+		sb.WriteString("\t\t}\n\n")
+	}
+
 	if m.IsMutating {
 		sb.WriteString("\t\tsetState(state)\n\n")
 	}
 
-	if len(m.Returns) > 0 {
+	if hasDataResult {
 		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
 		sb.WriteString("\t\tif err != nil {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
 		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
-	} else {
-		sb.WriteString("\t\tsuccessJSON, _ := encodingJson.Marshal(map[string]string{\"status\": \"success\"})\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(successJSON))\n")
 	}
 
 	sb.WriteString("\t\treturn nil\n")
@@ -635,9 +704,16 @@ func isBasicType(typeStr string) bool {
 
 func toSnakeCase(s string) string {
 	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('_')
+	runes := []rune(s)
+	length := len(runes)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			if (unicode.IsLower(prev) || unicode.IsDigit(prev)) ||
+				(unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1])) {
+				result.WriteRune('_')
+			}
 		}
 		result.WriteRune(r)
 	}

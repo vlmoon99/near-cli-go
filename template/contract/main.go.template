@@ -2,108 +2,97 @@ package main
 
 import (
 	"encoding/hex"
-	"fmt"
+	"strconv"
 
+	"github.com/vlmoon99/near-sdk-go/collections"
 	"github.com/vlmoon99/near-sdk-go/env"
-	"github.com/vlmoon99/near-sdk-go/json"
-	"github.com/vlmoon99/near-sdk-go/types"
 )
 
-//go:export InitContract
-func InitContract() {
+// ============================================================================
+// Contract State
+// ============================================================================
+
+// @contract:state
+type Contract struct {
+	// Using a map to simulate the generic key-value storage
+	Storage *collections.UnorderedMap[string, string]
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+// @contract:init
+func (c *Contract) InitContract() string {
+	c.Storage = collections.NewUnorderedMap[string, string]("storage")
 	env.LogString("Init Smart Contract")
-	env.ContractValueReturn([]byte("Init Smart Contract"))
+	return "Init Smart Contract"
 }
 
-//go:export WriteData
-func WriteData() {
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
+// ============================================================================
+// Data Methods
+// ============================================================================
+
+// WriteData accepts a key and data (string) and saves it to the contract state.
+//
+// @contract:mutating
+func (c *Contract) WriteData(key string, data string) string {
+	env.LogString("Writing data: Key=" + key + ", Data=" + data)
+
+	// Insert into the generic storage map
+	err := c.Storage.Insert(key, data)
 	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
+		env.PanicStr("Error writing to storage: " + err.Error())
 	}
 
-	env.LogString("Contract input (JSON): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
-
-	if detectedType != "object" {
-		env.ContractValueReturn([]byte("Error : Incorrect type"))
-	}
-	parser := json.NewParser(input)
-
-	keyResult, err := parser.GetString("key")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect key"))
-	}
-
-	dataResult, err := parser.GetRawBytes("data")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect data"))
-	}
-
-	resultStorageWrite, err := env.StorageWrite([]byte(keyResult), dataResult)
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : " + err.Error()))
-	}
-
-	if resultStorageWrite {
-		env.LogString("env.StorageWrite returned true")
-	} else {
-		env.LogString("env.StorageWrite returned false")
-	}
-
-	env.ContractValueReturn([]byte("WriteData was successful"))
+	env.LogString("env.StorageWrite simulated success")
+	return "WriteData was successful"
 }
 
-//go:export ReadData
-func ReadData() {
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
+// ReadData retrieves data by key.
+//
+// @contract:view
+func (c *Contract) ReadData(key string) string {
+	val, err := c.Storage.Get(key)
 	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
+		env.PanicStr("Error: Incorrect key or data not found")
 	}
 
-	env.LogString("Contract input (JSON): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
-
-	if detectedType != "object" {
-		env.ContractValueReturn([]byte("Error : Incorrect type" + "detected type is " + detectedType))
-		return
-	}
-	parser := json.NewParser(input)
-
-	keyResult, err := parser.GetString("key")
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect key"))
-		return
-	}
-
-	data, err := env.StorageRead([]byte(keyResult))
-	if err != nil {
-		env.ContractValueReturn([]byte("Error : Incorrect read from the storage by that key"))
-		return
-	}
 	env.LogString("ReadData was successful")
-
-	env.ContractValueReturn(data)
+	return val
 }
 
-//go:export AcceptPayment
-func AcceptPayment() {
+// ============================================================================
+// Financial Methods
+// ============================================================================
+
+// AcceptPayment handles attached deposits and transfers them to a testnet account.
+//
+// @contract:mutating
+// @contract:payable
+func (c *Contract) AcceptPayment() string {
 	attachedDeposit, err := env.GetAttachedDeposit()
 	if err != nil {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
-	env.LogString("Attached Deposit :" + attachedDeposit.String())
+	env.LogString("Attached Deposit: " + attachedDeposit.String())
+
+	// Create a promise to transfer the funds
 	promiseIdx := env.PromiseBatchCreate([]byte("neargoclitest.testnet"))
 	env.PromiseBatchActionTransfer(promiseIdx, attachedDeposit)
-	//neargocli.testnet
-	env.ContractValueReturn([]byte("AcceptPayment"))
 
+	return "AcceptPayment"
 }
 
-//go:export ReadIncommingTxData
-func ReadIncommingTxData() {
+// ============================================================================
+// Diagnostic & System Methods
+// ============================================================================
+
+// ReadIncommingTxData logs various environment variables and system context.
+//
+// @contract:mutating
+func (c *Contract) ReadIncommingTxData() string {
+	// 1. Log Event JSON
 	env.LogString(`EVENT_JSON:{
   "standard": "nep999",
   "version": "1.0.0",
@@ -112,79 +101,53 @@ func ReadIncommingTxData() {
     {"info": "ReadIncommingTxData", "test": ["test11"]}
   ]
 }`)
-	options := types.ContractInputOptions{IsRawBytes: true}
-	input, detectedType, err := env.ContractInput(options)
-	if err != nil {
-		env.PanicStr("Failed to get contract input: " + err.Error())
-	}
-	env.LogString("Contract input (raw bytes): " + string(input))
-	env.LogString("Detected input type: " + detectedType)
 
+	// 2. Log Attached Deposit
 	attachedDeposit, err := env.GetAttachedDeposit()
 	if err != nil {
 		env.PanicStr("Failed to get attached deposit: " + err.Error())
 	}
-	env.LogString(fmt.Sprintf("Attached deposit: %s", attachedDeposit.String()))
+	env.LogString("Attached deposit: " + attachedDeposit.String())
 
-	accountId, err := env.GetCurrentAccountId()
-	if err != nil || accountId == "" {
-		env.PanicStr("Failed to get current account ID: " + err.Error())
-	}
+	// 3. Log Account IDs
+	accountId, _ := env.GetCurrentAccountId()
 	env.LogString("Current account ID: " + accountId)
 
-	signerId, err := env.GetSignerAccountID()
-	if err != nil || signerId == "" {
-		env.PanicStr("Failed to get signer account ID: " + err.Error())
-	}
+	signerId, _ := env.GetSignerAccountID()
 	env.LogString("Signer account ID: " + signerId)
 
-	signerPK, err := env.GetSignerAccountPK()
-	if err != nil || signerPK == nil {
-		env.PanicStr("Failed to get signer account PK: " + err.Error())
-	}
-	env.LogString("Signer account PK: " + hex.EncodeToString(signerPK))
-
-	predecessorId, err := env.GetPredecessorAccountID()
-	if err != nil || predecessorId == "" {
-		env.PanicStr("Failed to get predecessor account ID: " + err.Error())
-	}
+	predecessorId, _ := env.GetPredecessorAccountID()
 	env.LogString("Predecessor account ID: " + predecessorId)
 
-	blockHeight := env.GetCurrentBlockHeight()
-	env.LogString("Current block height: " + fmt.Sprintf("%d", blockHeight))
-
-	blockTimeMs := env.GetBlockTimeMs()
-	env.LogString("Block time in ms: " + fmt.Sprintf("%d", blockTimeMs))
-
-	epochHeight := env.GetEpochHeight()
-	env.LogString("Epoch height: " + fmt.Sprintf("%d", epochHeight))
-
-	storageUsage := env.GetStorageUsage()
-	env.LogString("Storage usage: " + fmt.Sprintf("%d", storageUsage))
-
-	accountBalance, err := env.GetAccountBalance()
-	if err != nil {
-		env.PanicStr("Failed to get account balance: " + err.Error())
+	// 4. Log Signer PK
+	signerPK, err := env.GetSignerAccountPK()
+	if err == nil {
+		env.LogString("Signer account PK: " + hex.EncodeToString(signerPK))
 	}
-	env.LogString(fmt.Sprintf("Account balance: %s", accountBalance.String()))
 
-	lockedBalance, err := env.GetAccountLockedBalance()
-	if err != nil {
-		env.PanicStr("Failed to get account locked balance: " + err.Error())
-	}
-	env.LogString(fmt.Sprintf("Account locked balance: %s", lockedBalance.String()))
+	// 5. Log Block Context
+	env.LogString("Current block height: " + strconv.FormatUint(env.GetCurrentBlockHeight(), 10))
+	env.LogString("Block time in ms: " + strconv.FormatUint(env.GetBlockTimeMs(), 10))
+	env.LogString("Epoch height: " + strconv.FormatUint(env.GetEpochHeight(), 10))
 
-	prepaidGas := env.GetPrepaidGas()
-	env.LogString(fmt.Sprintf("Prepaid gas: %ds", prepaidGas.Inner))
+	// 6. Log Resources
+	env.LogString("Storage usage: " + strconv.FormatUint(env.GetStorageUsage(), 10))
+	env.LogString("Prepaid gas: " + strconv.FormatUint(env.GetPrepaidGas().Inner, 10))
+	env.LogString("Used gas: " + strconv.FormatUint(env.GetUsedGas().Inner, 10))
 
-	usedGas := env.GetUsedGas()
-	env.LogString(fmt.Sprintf("Used gas: %d", usedGas.Inner))
+	// 7. Log Balances
+	accountBalance, _ := env.GetAccountBalance()
+	env.LogString("Account balance: " + accountBalance.String())
 
-	env.ContractValueReturn([]byte("ReadIncommingTxData"))
+	lockedBalance, _ := env.GetAccountLockedBalance()
+	env.LogString("Account locked balance: " + lockedBalance.String())
+
+	return "ReadIncommingTxData"
 }
 
-//go:export ReadBlockchainData
-func ReadBlockchainData() {
-	//neargocli.testnet
-	env.ContractValueReturn([]byte("ReadBlockchainData"))
+// ReadBlockchainData is a simple view method.
+//
+// @contract:view
+func (c *Contract) ReadBlockchainData() string {
+	return "ReadBlockchainData"
 }

@@ -111,7 +111,7 @@ func (c *Contract) InitContract(startMsg string) {}
 		t.Errorf("Init method should start with defaultInit()")
 	}
 
-	if !strings.Contains(generated, "validatePayment(\"1NEAR\")") {
+	if !strings.Contains(generated, "validatePayment(\"1000000000000000000000000\")") {
 		t.Errorf("Expected validation of payment '1NEAR'")
 	}
 }

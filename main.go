@@ -13,16 +13,23 @@ func main() {
 	CheckDependencies()
 
 	app := &cli.App{
-		Name:  "near-go",
-		Usage: "CLI tool for managing projects on Near Blockchain",
+		Name:    "near-go",
+		Usage:   "CLI tool for managing projects on Near Blockchain",
+		Version: NearSdkGoVersion,
+		Authors: []cli.Author{
+			{Name: "Github : vlmoon99, Telegram : @vlmoon99"},
+		},
+		Description: "A comprehensive toolchain for scaffolding, building, testing, and deploying NEAR smart contracts written in Go. It utilizes TinyGo for WASM compilation and an annotation-based code generator for boilerplate reduction.",
 		Commands: []cli.Command{
 			{
 				Name:  "create",
-				Usage: "Create a new project",
+				Usage: "Scaffold a new smart contract project",
+				Description: "Creates a standard directory structure, initializes a go.mod file, " +
+					"and downloads the required NEAR Go SDK dependencies.",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "project-name, p", Required: true},
-					&cli.StringFlag{Name: "module-name, m", Required: true},
-					&cli.StringFlag{Name: "project-type, t", Required: true},
+					&cli.StringFlag{Name: "project-name, p", Required: true, Usage: "Name of the project folder to create"},
+					&cli.StringFlag{Name: "module-name, m", Required: true, Usage: "Go module name (e.g., github.com/user/project)"},
+					&cli.StringFlag{Name: "project-type, t", Required: true, Usage: "Type of project (e.g., smart-contract-empty)"},
 				},
 				Action: func(c *cli.Context) error {
 					if c.String("project-name") == "" || c.String("module-name") == "" {
@@ -33,7 +40,12 @@ func main() {
 			},
 			{
 				Name:  "build",
-				Usage: "Build the project",
+				Usage: "Compile the smart contract to WASM",
+				Description: "Executes the full build pipeline:\n" +
+					"   1. Scans source code for @contract annotations (state, methods).\n" +
+					"   2. Generates intermediate glue code ('generated_build.go') for JSON serialization and SDK integration.\n" +
+					"   3. Compiles the package using TinyGo targeting 'wasm-unknown'.\n" +
+					"   4. Cleans up generated artifacts.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "source, s",
@@ -47,7 +59,7 @@ func main() {
 					},
 					&cli.BoolFlag{
 						Name:  "keep-generated, k",
-						Usage: "Keep the generated intermediate Go file (generated_build.go) after build",
+						Usage: "Keep the intermediate 'generated_build.go' file for inspection/debugging",
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -56,27 +68,32 @@ func main() {
 			},
 			{
 				Name:  "test",
-				Usage: "Run tests",
+				Usage: "Run contract unit tests using TinyGo",
+				Description: "Executes Go tests using the TinyGo compiler to simulate the WASM environment constraints. " +
+					"This ensures dependencies and logic are compatible with the strict requirements of the NEAR runtime.",
 				Subcommands: []cli.Command{
 					{
 						Name:   "project",
+						Usage:  "Run tests recursively for the entire project (./...)",
 						Action: func(c *cli.Context) error { return HandleTests("project") },
 					},
 					{
 						Name:   "package",
+						Usage:  "Run tests only for the current directory (./)",
 						Action: func(c *cli.Context) error { return HandleTests("package") },
 					},
 				},
 			},
 			{
 				Name:  "account",
-				Usage: "Manage blockchain accounts",
+				Usage: "Manage NEAR blockchain accounts",
 				Subcommands: []cli.Command{
 					{
-						Name: "create",
+						Name:  "create",
+						Usage: "Create a new account (dev or testnet)",
 						Flags: []cli.Flag{
-							&cli.StringFlag{Name: "network, n", Required: true},
-							&cli.StringFlag{Name: "account-name, a"},
+							&cli.StringFlag{Name: "network, n", Required: true, Usage: "Network ID (testnet, mainnet, dev)"},
+							&cli.StringFlag{Name: "account-name, a", Usage: "Desired account name (required for non-dev networks)"},
 						},
 						Action: func(c *cli.Context) error {
 							net, name := c.String("network"), c.String("account-name")
@@ -90,7 +107,8 @@ func main() {
 						},
 					},
 					{
-						Name: "import",
+						Name:  "import",
+						Usage: "Import an existing account via private key",
 						Action: func(c *cli.Context) error {
 							return HandleImportAccount()
 						},
@@ -99,11 +117,11 @@ func main() {
 			},
 			{
 				Name:  "deploy",
-				Usage: "Deploy the project",
+				Usage: "Deploy a compiled WASM contract",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "contract-id, id", Required: true},
-					&cli.StringFlag{Name: "network, n", Required: true},
-					&cli.StringFlag{Name: "file, f", Usage: "WASM file to deploy", Value: "main.wasm"},
+					&cli.StringFlag{Name: "contract-id, id", Required: true, Usage: "Account ID to deploy the contract to"},
+					&cli.StringFlag{Name: "network, n", Required: true, Usage: "Network ID (testnet, mainnet)"},
+					&cli.StringFlag{Name: "file, f", Usage: "Path to WASM file", Value: "main.wasm"},
 				},
 				Action: func(c *cli.Context) error {
 					id, net := c.String("contract-id"), c.String("network")
@@ -115,15 +133,15 @@ func main() {
 			},
 			{
 				Name:  "call",
-				Usage: "Call a smart contract function",
+				Usage: "Invoke a method on a smart contract",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "signer, from", Required: true},
-					&cli.StringFlag{Name: "contract, to", Required: true},
-					&cli.StringFlag{Name: "method, function", Required: true},
-					&cli.StringFlag{Name: "args", Value: "{}"},
-					&cli.StringFlag{Name: "gas", Value: "100 Tgas"},
-					&cli.StringFlag{Name: "deposit", Value: "0 NEAR"},
-					&cli.StringFlag{Name: "network", Required: true},
+					&cli.StringFlag{Name: "signer, from", Required: true, Usage: "Account ID signing the transaction"},
+					&cli.StringFlag{Name: "contract, to", Required: true, Usage: "Contract Account ID"},
+					&cli.StringFlag{Name: "method, function", Required: true, Usage: "Method name to invoke"},
+					&cli.StringFlag{Name: "args", Value: "{}", Usage: "JSON arguments string"},
+					&cli.StringFlag{Name: "gas", Value: "100 Tgas", Usage: "Prepaid gas"},
+					&cli.StringFlag{Name: "deposit", Value: "0 NEAR", Usage: "Attached deposit"},
+					&cli.StringFlag{Name: "network", Required: true, Usage: "Network ID"},
 				},
 				Action: func(c *cli.Context) error {
 					return HandleCallFunction(

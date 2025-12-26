@@ -6,7 +6,7 @@ import "embed"
 var templates embed.FS
 
 const (
-	NearSdkGoVersion = "v0.0.13"
+	NearSdkGoVersion = "v0.1.0"
 
 	SmartContractTypeProject   = "smart-contract-empty"
 	SmartContractProjectFolder = "contract"
