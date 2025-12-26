@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,10 +176,7 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 				continue
 			}
 
-			// Start by assuming the declaration position
 			startPos := fset.Position(d.Pos()).Offset
-
-			// FIX: If comments exist (like //go:embed), start from the comment position
 			if d.Doc != nil {
 				startPos = fset.Position(d.Doc.Pos()).Offset
 			}
@@ -215,10 +213,7 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			content.Declarations = append(content.Declarations, declCode)
 
 		case *ast.FuncDecl:
-			// Start by assuming the function declaration position
 			startPos := fset.Position(d.Pos()).Offset
-
-			// FIX: If comments exist (like //go:export), start from the comment position
 			if d.Doc != nil {
 				startPos = fset.Position(d.Doc.Pos()).Offset
 			}
@@ -377,7 +372,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
-	importMap["\"strconv\""] = true
+	// Removed "strconv" as it's no longer needed for payment validation
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -465,27 +460,60 @@ func generateSetState(state *StateInfo) string {
 }`, state.Name)
 }
 
+// generateValidatePayment creates a helper that uses Uint128 for precise comparison
+// It expects minDepositYoctoStr to be a valid integer string pre-calculated by the generator
 func generateValidatePayment() string {
-	return `func validatePayment(minDeposit string) bool {
-	minAmount, err := strconv.ParseFloat(minDeposit, 64)
+	return `func validatePayment(minDepositYoctoStr string) bool {
+	minRequired, err := types.U128FromString(minDepositYoctoStr)
 	if err != nil {
-		env.LogString("Invalid min deposit amount: " + minDeposit)
-		return false
-	}
-	minYocto := minAmount * 1e24
-	minYoctoStr := strconv.FormatFloat(minYocto, 'f', 0, 64)
-	minRequired, err := types.U128FromString(minYoctoStr)
-	if err != nil {
-		env.LogString("Failed to create Uint128: " + err.Error())
+		env.LogString("Invalid min deposit config: " + minDepositYoctoStr)
 		return false
 	}
 	attachedDeposit, err := env.GetAttachedDeposit()
+	if err != nil {
+		env.LogString("Failed to get attached deposit")
+		return false
+	}
+	
+	// Check if attachedDeposit < minRequired
 	if attachedDeposit.Cmp(minRequired) < 0 {
 		env.LogString("Insufficient payment")
 		return false
 	}
 	return true
 }`
+}
+
+func parseAmountToYocto(amount string) string {
+	amount = strings.TrimSpace(amount)
+	if amount == "" {
+		return "0"
+	}
+
+	// Calculate using big.Int/Float to avoid float issues in generated code
+	// We convert "1NEAR" -> 1 * 10^24
+
+	isNear := false
+	if strings.HasSuffix(amount, "NEAR") {
+		isNear = true
+		amount = strings.TrimSuffix(amount, "NEAR")
+	}
+
+	valFloat, _, err := big.ParseFloat(amount, 10, 256, big.ToNearestEven)
+	if err != nil {
+		fmt.Printf("⚠️ Warning: Failed to parse min_deposit '%s', defaulting to 0\n", amount)
+		return "0"
+	}
+
+	if isNear {
+		// Multiply by 1e24
+		multiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(24), nil))
+		valFloat.Mul(valFloat, multiplier)
+	}
+
+	// Convert to integer string
+	valInt, _ := valFloat.Int(nil)
+	return valInt.String()
 }
 
 func generateExportFunction(m *MethodInfo) string {
@@ -508,8 +536,11 @@ func generateExportFunction(m *MethodInfo) string {
 		sb.WriteString("\t\tstate := getState()\n\n")
 	}
 
-	if m.IsPayable {
-		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", m.MinDeposit))
+	// Validate Payment Logic
+	if m.IsPayable && m.MinDeposit != "" {
+		// We pre-calculate the Yocto amount here in the generator to avoid float math in the contract
+		yoctoAmount := parseAmountToYocto(m.MinDeposit)
+		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", yoctoAmount))
 		sb.WriteString("\t\t\tenv.PanicStr(\"Insufficient payment\")\n")
 		sb.WriteString("\t\t}\n\n")
 	}

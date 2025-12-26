@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Fri Dec 26 15:16:01 UTC 2025
+### Generated at: Fri Dec 26 16:49:45 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -282,7 +282,15 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			if d.Tok == token.IMPORT {
 				continue
 			}
+
+			// Start by assuming the declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:embed), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -315,7 +323,14 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			content.Declarations = append(content.Declarations, declCode)
 
 		case *ast.FuncDecl:
+			// Start by assuming the function declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:export), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -1159,7 +1174,7 @@ import "embed"
 var templates embed.FS
 
 const (
-	NearSdkGoVersion = "v0.0.13"
+	NearSdkGoVersion = "v0.1.0"
 
 	SmartContractTypeProject   = "smart-contract-empty"
 	SmartContractProjectFolder = "contract"
@@ -1426,13 +1441,13 @@ func HandleCreateProject(projectName, projectType, moduleName string) error {
 	}
 
 	fmt.Printf("🚀 Creating project '%s'...\n", projectName)
+
 	if err := CreateFolderAndNavigate(projectName); err != nil {
 		return err
 	}
 
 	if err := initializeSmartContract(moduleName); err != nil {
 		os.Chdir("..")
-		os.RemoveAll(projectName)
 		return err
 	}
 
@@ -1442,24 +1457,6 @@ func HandleCreateProject(projectName, projectType, moduleName string) error {
 func initializeSmartContract(moduleName string) error {
 	if err := CreateFolderAndNavigate(SmartContractProjectFolder); err != nil {
 		return err
-	}
-
-	fmt.Println("📦 Initializing Go module...")
-	if _, err := ExecuteCommand("go", "mod", "init", moduleName); err != nil {
-		return err
-	}
-
-	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
-		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
-	}
-
-	fmt.Println("📥 Downloading dependencies...")
-	if _, err := ExecuteCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
-		return err
-	}
-
-	if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
-		return fmt.Errorf("%s", ErrGoProjectSumFileIsMissing)
 	}
 
 	fmt.Println("📝 Creating template...")
@@ -1472,9 +1469,29 @@ func initializeSmartContract(moduleName string) error {
 		return err
 	}
 
+	fmt.Println("📦 Initializing Go module...")
+	if _, err := ExecuteCommand("go", "mod", "init", moduleName); err != nil {
+		return fmt.Errorf("failed to init go module: %w", err)
+	}
+
+	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
+	}
+
+	fmt.Println("📥 Downloading dependencies...")
+	if _, err := ExecuteCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
+		fmt.Printf("⚠️ Warning: Failed to download dependencies: %v\n", err)
+		fmt.Println("   Please run 'go get ./...' manually inside the contract folder.")
+	} else {
+		if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
+			fmt.Println("⚠️ Warning: go.sum was not generated.")
+		}
+	}
+
 	fmt.Println("✅ Project created successfully!")
 	return nil
 }
+
 
 
 ==================================================
@@ -1611,7 +1628,7 @@ func TestToSnakeCase(t *testing.T) {
 	}{
 		{"HelloWorld", "hello_world"},
 		{"Submit", "submit"},
-		{"PDFLoad", "p_d_f_load"},
+		{"PDFLoad", "pdf_load"},
 		{"myFunction", "my_function"},
 	}
 
