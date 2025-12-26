@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Thu Dec 25 18:23:07 UTC 2025
+### Generated at: Fri Dec 26 12:01:55 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -513,7 +513,7 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 		if !m.IsPublic && !m.IsInit {
 			continue
 		}
-		sb.WriteString(generateExportFunction(m, stateStructs))
+		sb.WriteString(generateExportFunction(m))
 		sb.WriteString("\n")
 	}
 
@@ -581,7 +581,7 @@ func generateValidatePayment() string {
 }`
 }
 
-func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
+func generateExportFunction(m *MethodInfo) string {
 	var sb strings.Builder
 
 	exportName := toSnakeCase(m.Name)
@@ -610,11 +610,31 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	sb.WriteString(generateParamParser(m))
 	sb.WriteString("\n")
 
-	sb.WriteString("\t\t// Call method\n")
-	if len(m.Returns) > 0 {
-		sb.WriteString("\t\tresult := ")
+	returnsError := false
+	if len(m.Returns) > 0 && m.Returns[len(m.Returns)-1] == "error" {
+		returnsError = true
+	}
+
+	hasDataResult := false
+	if returnsError {
+		if len(m.Returns) > 1 {
+			hasDataResult = true
+		}
 	} else {
-		sb.WriteString("\t\t")
+		if len(m.Returns) > 0 {
+			hasDataResult = true
+		}
+	}
+
+	sb.WriteString("\t\t// Call method\n")
+	sb.WriteString("\t\t")
+
+	if hasDataResult && returnsError {
+		sb.WriteString("result, callErr := ")
+	} else if hasDataResult {
+		sb.WriteString("result := ")
+	} else if returnsError {
+		sb.WriteString("callErr := ")
 	}
 
 	sb.WriteString("state.")
@@ -636,19 +656,22 @@ func generateExportFunction(m *MethodInfo, stateStructs []*StateInfo) string {
 	}
 	sb.WriteString(")\n\n")
 
+	if returnsError {
+		sb.WriteString("\t\tif callErr != nil {\n")
+		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
+		sb.WriteString("\t\t}\n\n")
+	}
+
 	if m.IsMutating {
 		sb.WriteString("\t\tsetState(state)\n\n")
 	}
 
-	if len(m.Returns) > 0 {
+	if hasDataResult {
 		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
 		sb.WriteString("\t\tif err != nil {\n")
 		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
 		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
-	} else {
-		sb.WriteString("\t\tsuccessJSON, _ := encodingJson.Marshal(map[string]string{\"status\": \"success\"})\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(successJSON))\n")
 	}
 
 	sb.WriteString("\t\treturn nil\n")
@@ -743,9 +766,16 @@ func isBasicType(typeStr string) bool {
 
 func toSnakeCase(s string) string {
 	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteRune('_')
+	runes := []rune(s)
+	length := len(runes)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			if (unicode.IsLower(prev) || unicode.IsDigit(prev)) ||
+				(unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1])) {
+				result.WriteRune('_')
+			}
 		}
 		result.WriteRune(r)
 	}
