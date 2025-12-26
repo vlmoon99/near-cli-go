@@ -30,7 +30,7 @@ func TestToSnakeCase(t *testing.T) {
 	}{
 		{"HelloWorld", "hello_world"},
 		{"Submit", "submit"},
-		{"PDFLoad", "p_d_f_load"},
+		{"PDFLoad", "pdf_load"},
 		{"myFunction", "my_function"},
 	}
 

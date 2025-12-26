@@ -174,7 +174,15 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			if d.Tok == token.IMPORT {
 				continue
 			}
+
+			// Start by assuming the declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:embed), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
@@ -207,7 +215,14 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			content.Declarations = append(content.Declarations, declCode)
 
 		case *ast.FuncDecl:
+			// Start by assuming the function declaration position
 			startPos := fset.Position(d.Pos()).Offset
+
+			// FIX: If comments exist (like //go:export), start from the comment position
+			if d.Doc != nil {
+				startPos = fset.Position(d.Doc.Pos()).Offset
+			}
+
 			endPos := fset.Position(d.End()).Offset
 			declCode := string(fileContentBytes[startPos:endPos])
 
