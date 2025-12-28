@@ -372,7 +372,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
-	// Removed "strconv" as it's no longer needed for payment validation
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -460,8 +459,6 @@ func generateSetState(state *StateInfo) string {
 }`, state.Name)
 }
 
-// generateValidatePayment creates a helper that uses Uint128 for precise comparison
-// It expects minDepositYoctoStr to be a valid integer string pre-calculated by the generator
 func generateValidatePayment() string {
 	return `func validatePayment(minDepositYoctoStr string) bool {
 	minRequired, err := types.U128FromString(minDepositYoctoStr)
@@ -490,9 +487,6 @@ func parseAmountToYocto(amount string) string {
 		return "0"
 	}
 
-	// Calculate using big.Int/Float to avoid float issues in generated code
-	// We convert "1NEAR" -> 1 * 10^24
-
 	isNear := false
 	if strings.HasSuffix(amount, "NEAR") {
 		isNear = true
@@ -506,12 +500,10 @@ func parseAmountToYocto(amount string) string {
 	}
 
 	if isNear {
-		// Multiply by 1e24
 		multiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(24), nil))
 		valFloat.Mul(valFloat, multiplier)
 	}
 
-	// Convert to integer string
 	valInt, _ := valFloat.Int(nil)
 	return valInt.String()
 }
@@ -536,9 +528,7 @@ func generateExportFunction(m *MethodInfo) string {
 		sb.WriteString("\t\tstate := getState()\n\n")
 	}
 
-	// Validate Payment Logic
 	if m.IsPayable && m.MinDeposit != "" {
-		// We pre-calculate the Yocto amount here in the generator to avoid float math in the contract
 		yoctoAmount := parseAmountToYocto(m.MinDeposit)
 		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", yoctoAmount))
 		sb.WriteString("\t\t\tenv.PanicStr(\"Insufficient payment\")\n")

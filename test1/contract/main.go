@@ -1,5 +1,7 @@
 package main
 
+import "github.com/vlmoon99/near-sdk-go/env"
+
 // @contract:state
 type Contract struct {
 	Message string
@@ -7,6 +9,7 @@ type Contract struct {
 
 // @contract:init
 func (c *Contract) Init(msg string) {
+	env.LogString("Init Method")
 	c.Message = msg
 }
 
