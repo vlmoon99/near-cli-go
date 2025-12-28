@@ -62,7 +62,7 @@ func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
 
-	if err := ExecuteWithRetry("tinygo", args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
+	if err := ExecuteWithRetry(GetTinyGoPath(), args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
 		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
 		return err
 	}
@@ -85,7 +85,7 @@ func HandleTests(testType string) error {
 
 	fmt.Printf("🧪 Running %s tests...\n", testType)
 
-	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), "", 2, true); err != nil {
+	if err := ExecuteWithRetry(GetTinyGoPath(), append([]string{"test"}, target), "", 2, true); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
 
