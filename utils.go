@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,19 +14,46 @@ import (
 )
 
 func InitEmbeddedBins() {
-	nearCliPath := filepath.Join(os.TempDir(), "near")
-	if _, err := os.Stat(nearCliPath); err == nil {
+	tempDir := os.TempDir()
+
+	nearCliPath := filepath.Join(tempDir, "near")
+	if _, err := os.Stat(nearCliPath); err != nil {
+		if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
+			panic("failed to write near-cli: " + err.Error())
+		}
+	}
+
+	tinyGoDir := filepath.Join(tempDir, "tinygo")
+	tinyGoBinDir := filepath.Join(tinyGoDir, "bin")
+	tinyGoMainBin := filepath.Join(tinyGoBinDir, "tinygo")
+
+	if _, err := os.Stat(tinyGoMainBin); err == nil {
 		return
 	}
-	if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
-		panic("failed to write near-cli: " + err.Error())
+
+	fmt.Println("Extracting embedded TinyGo... (this happens once)")
+	if err := Unzip(bindata.TinyGoZip, tempDir); err != nil {
+		panic("failed to extract tinygo: " + err.Error())
+	}
+
+	entries, err := os.ReadDir(tinyGoBinDir)
+	if err != nil {
+		fmt.Printf("Warning: could not read tinygo bin directory to set permissions: %v\n", err)
+		return
+	}
+
+	for _, entry := range entries {
+		binPath := filepath.Join(tinyGoBinDir, entry.Name())
+
+		if err := os.Chmod(binPath, 0755); err != nil {
+			fmt.Printf("Warning: failed to chmod %s: %v\n", entry.Name(), err)
+		}
 	}
 }
 
 func CheckDependencies() {
 	programs := map[string]string{
-		"go":     "Go programming language",
-		"tinygo": "TinyGo compiler",
+		"go": "Go programming language",
 	}
 	missing := []string{}
 	for prog := range programs {
@@ -36,6 +65,55 @@ func CheckDependencies() {
 		fmt.Printf("Missing dependencies: %s\n", strings.Join(missing, ", "))
 		os.Exit(1)
 	}
+}
+
+func GetTinyGoPath() string {
+	return filepath.Join(os.TempDir(), "tinygo", "bin", "tinygo")
+}
+
+func Unzip(src []byte, dest string) error {
+	r, err := zip.NewReader(bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		return err
+	}
+
+	for _, f := range r.File {
+		fpath := filepath.Join(dest, f.Name)
+
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("%s: illegal file path", fpath)
+		}
+
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+
+		if err = os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func WriteToFile(filename, content string) error {
@@ -70,7 +148,6 @@ func ExecuteWithRetry(name string, args []string, dir string, retries int, debug
 	for i := range retries {
 		cmd := exec.Command(name, args...)
 
-		// Set the working directory if provided
 		if dir != "" {
 			cmd.Dir = dir
 		}

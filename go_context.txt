@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Fri Dec 26 16:49:45 UTC 2025
+### Generated at: Sun Dec 28 16:39:35 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -113,6 +113,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,10 +284,7 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 				continue
 			}
 
-			// Start by assuming the declaration position
 			startPos := fset.Position(d.Pos()).Offset
-
-			// FIX: If comments exist (like //go:embed), start from the comment position
 			if d.Doc != nil {
 				startPos = fset.Position(d.Doc.Pos()).Offset
 			}
@@ -323,10 +321,7 @@ func parseContract(filePath string, relativePath string) ([]*MethodInfo, []*Stat
 			content.Declarations = append(content.Declarations, declCode)
 
 		case *ast.FuncDecl:
-			// Start by assuming the function declaration position
 			startPos := fset.Position(d.Pos()).Offset
-
-			// FIX: If comments exist (like //go:export), start from the comment position
 			if d.Doc != nil {
 				startPos = fset.Position(d.Doc.Pos()).Offset
 			}
@@ -485,7 +480,6 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
-	importMap["\"strconv\""] = true
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -574,26 +568,52 @@ func generateSetState(state *StateInfo) string {
 }
 
 func generateValidatePayment() string {
-	return `func validatePayment(minDeposit string) bool {
-	minAmount, err := strconv.ParseFloat(minDeposit, 64)
+	return `func validatePayment(minDepositYoctoStr string) bool {
+	minRequired, err := types.U128FromString(minDepositYoctoStr)
 	if err != nil {
-		env.LogString("Invalid min deposit amount: " + minDeposit)
-		return false
-	}
-	minYocto := minAmount * 1e24
-	minYoctoStr := strconv.FormatFloat(minYocto, 'f', 0, 64)
-	minRequired, err := types.U128FromString(minYoctoStr)
-	if err != nil {
-		env.LogString("Failed to create Uint128: " + err.Error())
+		env.LogString("Invalid min deposit config: " + minDepositYoctoStr)
 		return false
 	}
 	attachedDeposit, err := env.GetAttachedDeposit()
+	if err != nil {
+		env.LogString("Failed to get attached deposit")
+		return false
+	}
+	
+	// Check if attachedDeposit < minRequired
 	if attachedDeposit.Cmp(minRequired) < 0 {
 		env.LogString("Insufficient payment")
 		return false
 	}
 	return true
 }`
+}
+
+func parseAmountToYocto(amount string) string {
+	amount = strings.TrimSpace(amount)
+	if amount == "" {
+		return "0"
+	}
+
+	isNear := false
+	if strings.HasSuffix(amount, "NEAR") {
+		isNear = true
+		amount = strings.TrimSuffix(amount, "NEAR")
+	}
+
+	valFloat, _, err := big.ParseFloat(amount, 10, 256, big.ToNearestEven)
+	if err != nil {
+		fmt.Printf("⚠️ Warning: Failed to parse min_deposit '%s', defaulting to 0\n", amount)
+		return "0"
+	}
+
+	if isNear {
+		multiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(24), nil))
+		valFloat.Mul(valFloat, multiplier)
+	}
+
+	valInt, _ := valFloat.Int(nil)
+	return valInt.String()
 }
 
 func generateExportFunction(m *MethodInfo) string {
@@ -616,8 +636,9 @@ func generateExportFunction(m *MethodInfo) string {
 		sb.WriteString("\t\tstate := getState()\n\n")
 	}
 
-	if m.IsPayable {
-		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", m.MinDeposit))
+	if m.IsPayable && m.MinDeposit != "" {
+		yoctoAmount := parseAmountToYocto(m.MinDeposit)
+		sb.WriteString(fmt.Sprintf("\t\tif !validatePayment(\"%s\") {\n", yoctoAmount))
 		sb.WriteString("\t\t\tenv.PanicStr(\"Insufficient payment\")\n")
 		sb.WriteString("\t\t}\n\n")
 	}
@@ -925,7 +946,7 @@ func (c *Contract) InitContract(startMsg string) {}
 		t.Errorf("Init method should start with defaultInit()")
 	}
 
-	if !strings.Contains(generated, "validatePayment(\"1NEAR\")") {
+	if !strings.Contains(generated, "validatePayment(\"1000000000000000000000000\")") {
 		t.Errorf("Expected validation of payment '1NEAR'")
 	}
 }
@@ -1501,8 +1522,10 @@ FILE: utils.go
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1512,19 +1535,46 @@ import (
 )
 
 func InitEmbeddedBins() {
-	nearCliPath := filepath.Join(os.TempDir(), "near")
-	if _, err := os.Stat(nearCliPath); err == nil {
+	tempDir := os.TempDir()
+
+	nearCliPath := filepath.Join(tempDir, "near")
+	if _, err := os.Stat(nearCliPath); err != nil {
+		if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
+			panic("failed to write near-cli: " + err.Error())
+		}
+	}
+
+	tinyGoDir := filepath.Join(tempDir, "tinygo")
+	tinyGoBinDir := filepath.Join(tinyGoDir, "bin")
+	tinyGoMainBin := filepath.Join(tinyGoBinDir, "tinygo")
+
+	if _, err := os.Stat(tinyGoMainBin); err == nil {
 		return
 	}
-	if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
-		panic("failed to write near-cli: " + err.Error())
+
+	fmt.Println("Extracting embedded TinyGo... (this happens once)")
+	if err := Unzip(bindata.TinyGoZip, tempDir); err != nil {
+		panic("failed to extract tinygo: " + err.Error())
+	}
+
+	entries, err := os.ReadDir(tinyGoBinDir)
+	if err != nil {
+		fmt.Printf("Warning: could not read tinygo bin directory to set permissions: %v\n", err)
+		return
+	}
+
+	for _, entry := range entries {
+		binPath := filepath.Join(tinyGoBinDir, entry.Name())
+
+		if err := os.Chmod(binPath, 0755); err != nil {
+			fmt.Printf("Warning: failed to chmod %s: %v\n", entry.Name(), err)
+		}
 	}
 }
 
 func CheckDependencies() {
 	programs := map[string]string{
-		"go":     "Go programming language",
-		"tinygo": "TinyGo compiler",
+		"go": "Go programming language",
 	}
 	missing := []string{}
 	for prog := range programs {
@@ -1536,6 +1586,55 @@ func CheckDependencies() {
 		fmt.Printf("Missing dependencies: %s\n", strings.Join(missing, ", "))
 		os.Exit(1)
 	}
+}
+
+func GetTinyGoPath() string {
+	return filepath.Join(os.TempDir(), "tinygo", "bin", "tinygo")
+}
+
+func Unzip(src []byte, dest string) error {
+	r, err := zip.NewReader(bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		return err
+	}
+
+	for _, f := range r.File {
+		fpath := filepath.Join(dest, f.Name)
+
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("%s: illegal file path", fpath)
+		}
+
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+
+		if err = os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func WriteToFile(filename, content string) error {
@@ -1570,7 +1669,6 @@ func ExecuteWithRetry(name string, args []string, dir string, retries int, debug
 	for i := range retries {
 		cmd := exec.Command(name, args...)
 
-		// Set the working directory if provided
 		if dir != "" {
 			cmd.Dir = dir
 		}

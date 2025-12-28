@@ -9,3 +9,6 @@ import (
 
 //go:embed tools/darwin_amd64/near
 var NearCli []byte
+
+//go:embed tools/darwin_amd64/tinygo.zip
+var TinyGoZip []byte
