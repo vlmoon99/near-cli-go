@@ -13,17 +13,36 @@ import (
 	"github.com/vlmoon99/near-cli-go/bindata"
 )
 
-func InitEmbeddedBins() {
-	tempDir := os.TempDir()
+// Constants for paths
+const (
+	ToolDirName = ".near-go"
+)
 
-	nearCliPath := filepath.Join(tempDir, "near")
+func getToolHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to temp if home is not available
+		return os.TempDir()
+	}
+	return filepath.Join(home, ToolDirName)
+}
+
+func InitEmbeddedBins() {
+	toolHome := getToolHome()
+
+	// Create ~/.near-go if it doesn't exist
+	if err := os.MkdirAll(toolHome, 0755); err != nil {
+		panic("failed to create tool home directory: " + err.Error())
+	}
+
+	nearCliPath := filepath.Join(toolHome, "near")
 	if _, err := os.Stat(nearCliPath); err != nil {
 		if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
 			panic("failed to write near-cli: " + err.Error())
 		}
 	}
 
-	tinyGoDir := filepath.Join(tempDir, "tinygo")
+	tinyGoDir := filepath.Join(toolHome, "tinygo")
 	tinyGoBinDir := filepath.Join(tinyGoDir, "bin")
 	tinyGoMainBin := filepath.Join(tinyGoBinDir, "tinygo")
 
@@ -32,7 +51,7 @@ func InitEmbeddedBins() {
 	}
 
 	fmt.Println("Extracting embedded TinyGo... (this happens once)")
-	if err := Unzip(bindata.TinyGoZip, tempDir); err != nil {
+	if err := Unzip(bindata.TinyGoZip, toolHome); err != nil {
 		panic("failed to extract tinygo: " + err.Error())
 	}
 
@@ -68,7 +87,7 @@ func CheckDependencies() {
 }
 
 func GetTinyGoPath() string {
-	return filepath.Join(os.TempDir(), "tinygo", "bin", "tinygo")
+	return filepath.Join(getToolHome(), "tinygo", "bin", "tinygo")
 }
 
 func Unzip(src []byte, dest string) error {

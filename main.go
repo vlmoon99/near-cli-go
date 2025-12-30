@@ -41,11 +41,18 @@ func main() {
 			{
 				Name:  "build",
 				Usage: "Compile the smart contract to WASM",
-				Description: "Executes the full build pipeline:\n" +
-					"   1. Scans source code for @contract annotations (state, methods).\n" +
-					"   2. Generates intermediate glue code ('generated_build.go') for JSON serialization and SDK integration.\n" +
-					"   3. Compiles the package using TinyGo targeting 'wasm-unknown'.\n" +
-					"   4. Cleans up generated artifacts.",
+				Description: `Executes the full build pipeline using Comment Directives:
+   
+   1. Scans for @contract annotations:
+      - @contract:state: Identifies the main state struct (Only 1 allowed).
+      - @contract:init: Marks the initialization method (Only 1 allowed).
+      - @contract:view: Read-only method. Compatible with promise_callback.
+      - @contract:mutating: Modifies state. Compatible with payable and promise_callback.
+      - @contract:payable: Accepts attached NEAR.
+      - @contract:promise_callback: Handles async promise results. Must be combined with 'view' or 'mutating'.
+
+   2. Generates 'generated_build.go' with JSON logic and SDK glue code.
+   3. Compiles using TinyGo to WASM.`,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "source, s",
