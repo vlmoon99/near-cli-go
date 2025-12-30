@@ -13,20 +13,21 @@ import (
 )
 
 type MethodInfo struct {
-	Name         string
-	ReceiverType string
-	Params       []Param
-	Returns      []string
-	IsPublic     bool
-	IsPrivate    bool
-	IsView       bool
-	IsMutating   bool
-	IsPayable    bool
-	IsInit       bool
-	MinDeposit   string
-	FilePath     string
-	RelativePath string
-	SourceCode   string
+	Name              string
+	ReceiverType      string
+	Params            []Param
+	Returns           []string
+	IsPublic          bool
+	IsPrivate         bool
+	IsView            bool
+	IsMutating        bool
+	IsPayable         bool
+	IsInit            bool
+	IsPromiseCallback bool
+	MinDeposit        string
+	FilePath          string
+	RelativePath      string
+	SourceCode        string
 }
 
 type Param struct {
@@ -63,11 +64,34 @@ func GenerateCode(rootDir string) (string, error) {
 		return "", err
 	}
 
-	if len(allMethods) == 0 && len(stateStructs) == 0 {
-		return "", fmt.Errorf("no methods or state structs with @contract annotations found")
+	if len(stateStructs) == 0 {
+		return "", fmt.Errorf("no struct with @contract:state found")
+	}
+	if len(stateStructs) > 1 {
+		return "", fmt.Errorf("found %d structs with @contract:state, only 1 is allowed", len(stateStructs))
 	}
 
-	fmt.Printf("DEBUG: Found %d State Structs and %d Public Methods\n", len(stateStructs), countPublicMethods(allMethods))
+	initMethods := 0
+	for _, m := range allMethods {
+		if m.IsInit {
+			initMethods++
+		}
+	}
+	if initMethods > 1 {
+		return "", fmt.Errorf("found %d methods with @contract:init, only 1 is allowed", initMethods)
+	}
+
+	for _, m := range allMethods {
+		if err := validateMethodCompatibility(m); err != nil {
+			return "", err
+		}
+	}
+
+	if len(allMethods) == 0 {
+		return "", fmt.Errorf("no methods with @contract annotations found")
+	}
+
+	fmt.Printf("DEBUG: Found State Struct '%s' and %d Public Methods\n", stateStructs[0].Name, countPublicMethods(allMethods))
 
 	return generateCode(allMethods, stateStructs, fileContents), nil
 }
@@ -80,6 +104,19 @@ func countPublicMethods(methods []*MethodInfo) int {
 		}
 	}
 	return count
+}
+
+func validateMethodCompatibility(m *MethodInfo) error {
+	if m.IsView && m.IsMutating {
+		return fmt.Errorf("method '%s' cannot be both @contract:view and @contract:mutating", m.Name)
+	}
+	if m.IsView && m.IsPayable {
+		return fmt.Errorf("method '%s' cannot be both @contract:view and @contract:payable", m.Name)
+	}
+	if m.IsInit && m.IsView {
+		return fmt.Errorf("method '%s' cannot be both @contract:init and @contract:view", m.Name)
+	}
+	return nil
 }
 
 func parseAllFilesRecursive(rootDir string) ([]*MethodInfo, []*StateInfo, []*FileContent, error) {
@@ -330,6 +367,9 @@ func parseAnnotation(text string, method *MethodInfo) {
 	case "mutating":
 		method.IsMutating = true
 		method.IsPublic = true
+	case "promise_callback":
+		method.IsPromiseCallback = true
+		method.IsPublic = true
 	case "payable":
 		method.IsPayable = true
 		method.IsPublic = true
@@ -372,6 +412,17 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
+
+	hasCallback := false
+	for _, m := range methods {
+		if m.IsPromiseCallback {
+			hasCallback = true
+			break
+		}
+	}
+	if hasCallback {
+		importMap["\"github.com/vlmoon99/near-sdk-go/promise\""] = true
+	}
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -535,7 +586,38 @@ func generateExportFunction(m *MethodInfo) string {
 		sb.WriteString("\t\t}\n\n")
 	}
 
-	sb.WriteString(generateParamParser(m))
+	isPromiseSlice := false
+	if m.IsPromiseCallback {
+		for _, p := range m.Params {
+			if p.Type == "[]promise.PromiseResult" {
+				isPromiseSlice = true
+				break
+			}
+		}
+
+		if isPromiseSlice {
+			sb.WriteString("\t\t// Promise Callback Wrapper (Multiple Results)\n")
+			sb.WriteString("\t\tcontractBuilder.HandlePromiseResults(func(promRes []promise.PromiseResult) error {\n")
+		} else {
+			sb.WriteString("\t\t// Promise Callback Wrapper (Single Result)\n")
+			sb.WriteString("\t\tcontractBuilder.HandlePromiseResult(func(promRes *promise.PromiseResult) error {\n")
+		}
+	}
+
+	paramsToParse := []Param{}
+	for _, p := range m.Params {
+		if m.IsPromiseCallback && (p.Type == "promise.PromiseResult" || p.Type == "*promise.PromiseResult" || p.Type == "[]promise.PromiseResult") {
+			continue
+		}
+		paramsToParse = append(paramsToParse, p)
+	}
+
+	indent := "\t\t"
+	if m.IsPromiseCallback {
+		indent = "\t\t\t"
+	}
+
+	sb.WriteString(generateParamParser(paramsToParse, indent))
 	sb.WriteString("\n")
 
 	returnsError := false
@@ -554,8 +636,8 @@ func generateExportFunction(m *MethodInfo) string {
 		}
 	}
 
-	sb.WriteString("\t\t// Call method\n")
-	sb.WriteString("\t\t")
+	sb.WriteString(indent + "// Call method\n")
+	sb.WriteString(indent)
 
 	if hasDataResult && returnsError {
 		sb.WriteString("result, callErr := ")
@@ -569,76 +651,105 @@ func generateExportFunction(m *MethodInfo) string {
 	sb.WriteString(m.Name)
 	sb.WriteString("(")
 
-	if len(m.Params) > 0 {
-		if len(m.Params) == 1 && !isBasicType(m.Params[0].Type) {
-			sb.WriteString("params")
-		} else {
-			for i, p := range m.Params {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString("params.")
-				sb.WriteString(capitalizeFirst(p.Name))
+	argCount := 0
+	for _, p := range m.Params {
+		if argCount > 0 {
+			sb.WriteString(", ")
+		}
+
+		if m.IsPromiseCallback {
+			if p.Type == "promise.PromiseResult" {
+				sb.WriteString("*promRes")
+				argCount++
+				continue
+			} else if p.Type == "*promise.PromiseResult" {
+				sb.WriteString("promRes")
+				argCount++
+				continue
+			} else if p.Type == "[]promise.PromiseResult" {
+				sb.WriteString("promRes")
+				argCount++
+				continue
 			}
 		}
+
+		if len(paramsToParse) == 1 && !isBasicType(paramsToParse[0].Type) {
+			sb.WriteString("params")
+		} else {
+			sb.WriteString("params.")
+			sb.WriteString(capitalizeFirst(p.Name))
+		}
+		argCount++
 	}
 	sb.WriteString(")\n\n")
 
 	if returnsError {
-		sb.WriteString("\t\tif callErr != nil {\n")
-		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
-		sb.WriteString("\t\t}\n\n")
+		sb.WriteString(indent + "if callErr != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(callErr.Error())\n")
+		sb.WriteString(indent + "}\n\n")
 	}
 
-	if m.IsMutating {
-		sb.WriteString("\t\tsetState(state)\n\n")
+	if m.IsMutating || m.IsInit {
+		sb.WriteString(indent + "setState(state)\n\n")
 	}
 
 	if hasDataResult {
-		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
-		sb.WriteString("\t\t}\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
+		sb.WriteString(indent + "resultJSON, err := encodingJson.Marshal(result)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
+		sb.WriteString(indent + "}\n")
+		sb.WriteString(indent + "contractBuilder.ReturnValue(string(resultJSON))\n")
 	}
 
-	sb.WriteString("\t\treturn nil\n")
+	sb.WriteString(indent + "return nil\n")
+
+	if m.IsPromiseCallback {
+		sb.WriteString("\t\t})\n")
+		sb.WriteString("\t\treturn nil\n")
+	}
+
 	sb.WriteString("\t})\n")
 	sb.WriteString("}\n")
 
 	return sb.String()
 }
 
-func generateParamParser(method *MethodInfo) string {
-	if len(method.Params) == 0 {
-		return "\t\t// No parameters to parse\n"
+func generateParamParser(params []Param, indent string) string {
+	if len(params) == 0 {
+		return indent + "// No parameters to parse\n"
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\t\t// Parse input parameters from JSON\n")
+	sb.WriteString(indent + "// Parse input parameters\n")
 
-	if len(method.Params) == 1 && !isBasicType(method.Params[0].Type) {
-		p := method.Params[0]
-		sb.WriteString(fmt.Sprintf("\t\tvar params %s\n", p.Type))
-		sb.WriteString("\t\terr := encodingJson.Unmarshal(input.Data, &params)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString(fmt.Sprintf("\t\t\tenv.LogString(\"JSON unmarshal error for %s: \" + err.Error())\n", p.Type))
-		sb.WriteString(fmt.Sprintf("\t\t\tenv.PanicStr(\"Failed to parse %s parameter\")\n", p.Type))
-		sb.WriteString("\t\t}\n")
+	if len(params) == 1 && params[0].Type == "[]byte" {
+		p := params[0]
+		sb.WriteString(fmt.Sprintf("%svar params %s\n", indent, p.Type))
+		sb.WriteString(indent + "// Raw bytes requested, skipping JSON unmarshal\n")
+		sb.WriteString(indent + "params = input.Data\n")
+		return sb.String()
+	}
+
+	if len(params) == 1 && !isBasicType(params[0].Type) {
+		p := params[0]
+		sb.WriteString(fmt.Sprintf("%svar params %s\n", indent, p.Type))
+		sb.WriteString(indent + "err := encodingJson.Unmarshal(input.Data, &params)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to parse " + p.Type + " parameter\")\n")
+		sb.WriteString(indent + "}\n")
 	} else {
-		sb.WriteString("\t\tvar params struct {\n")
-		for _, p := range method.Params {
+		sb.WriteString(indent + "var params struct {\n")
+		for _, p := range params {
 			fieldName := capitalizeFirst(p.Name)
 			jsonTag := fmt.Sprintf("`json:\"%s\"`", p.Name)
-			sb.WriteString(fmt.Sprintf("\t\t\t%s %s %s\n", fieldName, p.Type, jsonTag))
+			sb.WriteString(fmt.Sprintf("%s\t%s %s %s\n", indent, fieldName, p.Type, jsonTag))
 		}
-		sb.WriteString("\t\t}\n")
+		sb.WriteString(indent + "}\n")
 
-		sb.WriteString("\t\terr := encodingJson.Unmarshal(input.Data, &params)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString("\t\t\tenv.LogString(\"JSON unmarshal error: \" + err.Error())\n")
-		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to parse input parameters\")\n")
-		sb.WriteString("\t\t}\n")
+		sb.WriteString(indent + "err := encodingJson.Unmarshal(input.Data, &params)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to parse input parameters\")\n")
+		sb.WriteString(indent + "}\n")
 	}
 
 	return sb.String()

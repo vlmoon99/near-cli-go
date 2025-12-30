@@ -1,5 +1,5 @@
 ### GO PROJECT CONTEXT (ROOT FILES ONLY)
-### Generated at: Sun Dec 28 16:39:35 UTC 2025
+### Generated at: Tue Dec 30 13:18:12 UTC 2025
 
 ==================================================
 FILE: builder.go
@@ -69,7 +69,7 @@ func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
 
-	if err := ExecuteWithRetry("tinygo", args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
+	if err := ExecuteWithRetry(GetTinyGoPath(), args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
 		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
 		return err
 	}
@@ -92,7 +92,7 @@ func HandleTests(testType string) error {
 
 	fmt.Printf("🧪 Running %s tests...\n", testType)
 
-	if err := ExecuteWithRetry("tinygo", append([]string{"test"}, target), "", 2, true); err != nil {
+	if err := ExecuteWithRetry(GetTinyGoPath(), append([]string{"test"}, target), "", 2, true); err != nil {
 		return fmt.Errorf("tests failed: %w", err)
 	}
 
@@ -121,20 +121,21 @@ import (
 )
 
 type MethodInfo struct {
-	Name         string
-	ReceiverType string
-	Params       []Param
-	Returns      []string
-	IsPublic     bool
-	IsPrivate    bool
-	IsView       bool
-	IsMutating   bool
-	IsPayable    bool
-	IsInit       bool
-	MinDeposit   string
-	FilePath     string
-	RelativePath string
-	SourceCode   string
+	Name              string
+	ReceiverType      string
+	Params            []Param
+	Returns           []string
+	IsPublic          bool
+	IsPrivate         bool
+	IsView            bool
+	IsMutating        bool
+	IsPayable         bool
+	IsInit            bool
+	IsPromiseCallback bool
+	MinDeposit        string
+	FilePath          string
+	RelativePath      string
+	SourceCode        string
 }
 
 type Param struct {
@@ -171,11 +172,39 @@ func GenerateCode(rootDir string) (string, error) {
 		return "", err
 	}
 
-	if len(allMethods) == 0 && len(stateStructs) == 0 {
-		return "", fmt.Errorf("no methods or state structs with @contract annotations found")
+	// === VALIDATION RULES ===
+
+	// Rule 1: Only one State struct
+	if len(stateStructs) == 0 {
+		return "", fmt.Errorf("no struct with @contract:state found")
+	}
+	if len(stateStructs) > 1 {
+		return "", fmt.Errorf("found %d structs with @contract:state, only 1 is allowed", len(stateStructs))
 	}
 
-	fmt.Printf("DEBUG: Found %d State Structs and %d Public Methods\n", len(stateStructs), countPublicMethods(allMethods))
+	// Rule 2: Only one Init method
+	initMethods := 0
+	for _, m := range allMethods {
+		if m.IsInit {
+			initMethods++
+		}
+	}
+	if initMethods > 1 {
+		return "", fmt.Errorf("found %d methods with @contract:init, only 1 is allowed", initMethods)
+	}
+
+	// Rule 3: Method Annotation Compatibility
+	for _, m := range allMethods {
+		if err := validateMethodCompatibility(m); err != nil {
+			return "", err
+		}
+	}
+
+	if len(allMethods) == 0 {
+		return "", fmt.Errorf("no methods with @contract annotations found")
+	}
+
+	fmt.Printf("DEBUG: Found State Struct '%s' and %d Public Methods\n", stateStructs[0].Name, countPublicMethods(allMethods))
 
 	return generateCode(allMethods, stateStructs, fileContents), nil
 }
@@ -188,6 +217,20 @@ func countPublicMethods(methods []*MethodInfo) int {
 		}
 	}
 	return count
+}
+
+func validateMethodCompatibility(m *MethodInfo) error {
+	if m.IsView && m.IsMutating {
+		return fmt.Errorf("method '%s' cannot be both @contract:view and @contract:mutating", m.Name)
+	}
+	if m.IsView && m.IsPayable {
+		return fmt.Errorf("method '%s' cannot be both @contract:view and @contract:payable", m.Name)
+	}
+	// Init is effectively mutating, so we don't strictly ban Init + Mutating, but Init + View is wrong.
+	if m.IsInit && m.IsView {
+		return fmt.Errorf("method '%s' cannot be both @contract:init and @contract:view", m.Name)
+	}
+	return nil
 }
 
 func parseAllFilesRecursive(rootDir string) ([]*MethodInfo, []*StateInfo, []*FileContent, error) {
@@ -438,6 +481,12 @@ func parseAnnotation(text string, method *MethodInfo) {
 	case "mutating":
 		method.IsMutating = true
 		method.IsPublic = true
+	case "promise_callback":
+		// NOTE: promise_callback does NOT imply mutating or view.
+		// It strictly means "handle promise result".
+		// Users must combine it with @contract:mutating or @contract:view.
+		method.IsPromiseCallback = true
+		method.IsPublic = true
 	case "payable":
 		method.IsPayable = true
 		method.IsPublic = true
@@ -480,6 +529,18 @@ func generateCode(methods []*MethodInfo, stateStructs []*StateInfo, fileContents
 	importMap["\"github.com/vlmoon99/near-sdk-go/env\""] = true
 	importMap["\"github.com/vlmoon99/near-sdk-go/types\""] = true
 	importMap["encodingJson \"encoding/json\""] = true
+
+	// Add promise import if any method is a callback
+	hasCallback := false
+	for _, m := range methods {
+		if m.IsPromiseCallback {
+			hasCallback = true
+			break
+		}
+	}
+	if hasCallback {
+		importMap["\"github.com/vlmoon99/near-sdk-go/promise\""] = true
+	}
 
 	for _, content := range fileContents {
 		for _, imp := range content.Imports {
@@ -643,7 +704,30 @@ func generateExportFunction(m *MethodInfo) string {
 		sb.WriteString("\t\t}\n\n")
 	}
 
-	sb.WriteString(generateParamParser(m))
+	// === LOGIC FOR PROMISE CALLBACK VS STANDARD CALL ===
+
+	if m.IsPromiseCallback {
+		// Wrap in HandlePromiseResult.
+		sb.WriteString("\t\t// Promise Callback Wrapper\n")
+		sb.WriteString("\t\tcontractBuilder.HandlePromiseResult(func(promRes *promise.PromiseResult) error {\n")
+	}
+
+	// Filter params: if it's a callback, exclude the PromiseResult param from JSON parsing logic
+	paramsToParse := []Param{}
+	for _, p := range m.Params {
+		if m.IsPromiseCallback && (p.Type == "promise.PromiseResult" || p.Type == "*promise.PromiseResult") {
+			continue
+		}
+		paramsToParse = append(paramsToParse, p)
+	}
+
+	// Helper struct to use correct indentation
+	indent := "\t\t"
+	if m.IsPromiseCallback {
+		indent = "\t\t\t"
+	}
+
+	sb.WriteString(generateParamParser(paramsToParse, indent))
 	sb.WriteString("\n")
 
 	returnsError := false
@@ -662,8 +746,8 @@ func generateExportFunction(m *MethodInfo) string {
 		}
 	}
 
-	sb.WriteString("\t\t// Call method\n")
-	sb.WriteString("\t\t")
+	sb.WriteString(indent + "// Call method\n")
+	sb.WriteString(indent)
 
 	if hasDataResult && returnsError {
 		sb.WriteString("result, callErr := ")
@@ -677,76 +761,105 @@ func generateExportFunction(m *MethodInfo) string {
 	sb.WriteString(m.Name)
 	sb.WriteString("(")
 
-	if len(m.Params) > 0 {
-		if len(m.Params) == 1 && !isBasicType(m.Params[0].Type) {
+	// Argument Passing Logic
+	argCount := 0
+	for _, p := range m.Params {
+		if argCount > 0 {
+			sb.WriteString(", ")
+		}
+
+		// If it's a promise result param in a callback function
+		if m.IsPromiseCallback && p.Type == "promise.PromiseResult" {
+			sb.WriteString("*promRes") // Dereference because handler gives pointer, but user likely asked for value
+			argCount++
+			continue
+		} else if m.IsPromiseCallback && p.Type == "*promise.PromiseResult" {
+			sb.WriteString("promRes")
+			argCount++
+			continue
+		}
+
+		// Standard params
+		if len(paramsToParse) == 1 && !isBasicType(paramsToParse[0].Type) {
+			// Single struct case or single param case
 			sb.WriteString("params")
 		} else {
-			for i, p := range m.Params {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString("params.")
-				sb.WriteString(capitalizeFirst(p.Name))
-			}
+			sb.WriteString("params.")
+			sb.WriteString(capitalizeFirst(p.Name))
 		}
+		argCount++
 	}
 	sb.WriteString(")\n\n")
 
 	if returnsError {
-		sb.WriteString("\t\tif callErr != nil {\n")
-		sb.WriteString("\t\t\tenv.PanicStr(callErr.Error())\n")
-		sb.WriteString("\t\t}\n\n")
+		sb.WriteString(indent + "if callErr != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(callErr.Error())\n")
+		sb.WriteString(indent + "}\n\n")
 	}
 
-	if m.IsMutating {
-		sb.WriteString("\t\tsetState(state)\n\n")
+	// STRICT RULE: Only save state if explicitly mutating or init.
+	if m.IsMutating || m.IsInit {
+		sb.WriteString(indent + "setState(state)\n\n")
 	}
 
 	if hasDataResult {
-		sb.WriteString("\t\tresultJSON, err := encodingJson.Marshal(result)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
-		sb.WriteString("\t\t}\n")
-		sb.WriteString("\t\tcontractBuilder.ReturnValue(string(resultJSON))\n")
+		sb.WriteString(indent + "resultJSON, err := encodingJson.Marshal(result)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to marshal result to JSON\")\n")
+		sb.WriteString(indent + "}\n")
+		sb.WriteString(indent + "contractBuilder.ReturnValue(string(resultJSON))\n")
 	}
 
-	sb.WriteString("\t\treturn nil\n")
-	sb.WriteString("\t})\n")
+	sb.WriteString(indent + "return nil\n")
+
+	if m.IsPromiseCallback {
+		sb.WriteString("\t\t})\n") // Close HandlePromiseResult
+		// Must return nil for the outer HandleClientJSONInput function
+		sb.WriteString("\t\treturn nil\n")
+	}
+
+	sb.WriteString("\t})\n") // Close HandleClientJSONInput
 	sb.WriteString("}\n")
 
 	return sb.String()
 }
 
-func generateParamParser(method *MethodInfo) string {
-	if len(method.Params) == 0 {
-		return "\t\t// No parameters to parse\n"
+func generateParamParser(params []Param, indent string) string {
+	if len(params) == 0 {
+		return indent + "// No parameters to parse\n"
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\t\t// Parse input parameters from JSON\n")
+	sb.WriteString(indent + "// Parse input parameters\n")
 
-	if len(method.Params) == 1 && !isBasicType(method.Params[0].Type) {
-		p := method.Params[0]
-		sb.WriteString(fmt.Sprintf("\t\tvar params %s\n", p.Type))
-		sb.WriteString("\t\terr := encodingJson.Unmarshal(input.Data, &params)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString(fmt.Sprintf("\t\t\tenv.LogString(\"JSON unmarshal error for %s: \" + err.Error())\n", p.Type))
-		sb.WriteString(fmt.Sprintf("\t\t\tenv.PanicStr(\"Failed to parse %s parameter\")\n", p.Type))
-		sb.WriteString("\t\t}\n")
+	if len(params) == 1 && params[0].Type == "[]byte" {
+		p := params[0]
+		sb.WriteString(fmt.Sprintf("%svar params %s\n", indent, p.Type))
+		sb.WriteString(indent + "// Raw bytes requested, skipping JSON unmarshal\n")
+		sb.WriteString(indent + "params = input.Data\n")
+		return sb.String()
+	}
+
+	if len(params) == 1 && !isBasicType(params[0].Type) {
+		p := params[0]
+		sb.WriteString(fmt.Sprintf("%svar params %s\n", indent, p.Type))
+		sb.WriteString(indent + "err := encodingJson.Unmarshal(input.Data, &params)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to parse " + p.Type + " parameter\")\n")
+		sb.WriteString(indent + "}\n")
 	} else {
-		sb.WriteString("\t\tvar params struct {\n")
-		for _, p := range method.Params {
+		sb.WriteString(indent + "var params struct {\n")
+		for _, p := range params {
 			fieldName := capitalizeFirst(p.Name)
 			jsonTag := fmt.Sprintf("`json:\"%s\"`", p.Name)
-			sb.WriteString(fmt.Sprintf("\t\t\t%s %s %s\n", fieldName, p.Type, jsonTag))
+			sb.WriteString(fmt.Sprintf("%s\t%s %s %s\n", indent, fieldName, p.Type, jsonTag))
 		}
-		sb.WriteString("\t\t}\n")
+		sb.WriteString(indent + "}\n")
 
-		sb.WriteString("\t\terr := encodingJson.Unmarshal(input.Data, &params)\n")
-		sb.WriteString("\t\tif err != nil {\n")
-		sb.WriteString("\t\t\tenv.LogString(\"JSON unmarshal error: \" + err.Error())\n")
-		sb.WriteString("\t\t\tenv.PanicStr(\"Failed to parse input parameters\")\n")
-		sb.WriteString("\t\t}\n")
+		sb.WriteString(indent + "err := encodingJson.Unmarshal(input.Data, &params)\n")
+		sb.WriteString(indent + "if err != nil {\n")
+		sb.WriteString(indent + "\tenv.PanicStr(\"Failed to parse input parameters\")\n")
+		sb.WriteString(indent + "}\n")
 	}
 
 	return sb.String()
@@ -1267,11 +1380,18 @@ func main() {
 			{
 				Name:  "build",
 				Usage: "Compile the smart contract to WASM",
-				Description: "Executes the full build pipeline:\n" +
-					"   1. Scans source code for @contract annotations (state, methods).\n" +
-					"   2. Generates intermediate glue code ('generated_build.go') for JSON serialization and SDK integration.\n" +
-					"   3. Compiles the package using TinyGo targeting 'wasm-unknown'.\n" +
-					"   4. Cleans up generated artifacts.",
+				Description: `Executes the full build pipeline using Comment Directives:
+   
+   1. Scans for @contract annotations:
+      - @contract:state: Identifies the main state struct (Only 1 allowed).
+      - @contract:init: Marks the initialization method (Only 1 allowed).
+      - @contract:view: Read-only method. Compatible with promise_callback.
+      - @contract:mutating: Modifies state. Compatible with payable and promise_callback.
+      - @contract:payable: Accepts attached NEAR.
+      - @contract:promise_callback: Handles async promise results. Must be combined with 'view' or 'mutating'.
+
+   2. Generates 'generated_build.go' with JSON logic and SDK glue code.
+   3. Compiles using TinyGo to WASM.`,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "source, s",
@@ -1534,17 +1654,36 @@ import (
 	"github.com/vlmoon99/near-cli-go/bindata"
 )
 
-func InitEmbeddedBins() {
-	tempDir := os.TempDir()
+// Constants for paths
+const (
+	ToolDirName = ".near-go"
+)
 
-	nearCliPath := filepath.Join(tempDir, "near")
+func getToolHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to temp if home is not available
+		return os.TempDir()
+	}
+	return filepath.Join(home, ToolDirName)
+}
+
+func InitEmbeddedBins() {
+	toolHome := getToolHome()
+
+	// Create ~/.near-go if it doesn't exist
+	if err := os.MkdirAll(toolHome, 0755); err != nil {
+		panic("failed to create tool home directory: " + err.Error())
+	}
+
+	nearCliPath := filepath.Join(toolHome, "near")
 	if _, err := os.Stat(nearCliPath); err != nil {
 		if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
 			panic("failed to write near-cli: " + err.Error())
 		}
 	}
 
-	tinyGoDir := filepath.Join(tempDir, "tinygo")
+	tinyGoDir := filepath.Join(toolHome, "tinygo")
 	tinyGoBinDir := filepath.Join(tinyGoDir, "bin")
 	tinyGoMainBin := filepath.Join(tinyGoBinDir, "tinygo")
 
@@ -1553,7 +1692,7 @@ func InitEmbeddedBins() {
 	}
 
 	fmt.Println("Extracting embedded TinyGo... (this happens once)")
-	if err := Unzip(bindata.TinyGoZip, tempDir); err != nil {
+	if err := Unzip(bindata.TinyGoZip, toolHome); err != nil {
 		panic("failed to extract tinygo: " + err.Error())
 	}
 
@@ -1589,7 +1728,7 @@ func CheckDependencies() {
 }
 
 func GetTinyGoPath() string {
-	return filepath.Join(os.TempDir(), "tinygo", "bin", "tinygo")
+	return filepath.Join(getToolHome(), "tinygo", "bin", "tinygo")
 }
 
 func Unzip(src []byte, dest string) error {
