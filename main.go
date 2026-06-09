@@ -20,6 +20,16 @@ func main() {
 			{Name: "Github : vlmoon99, Telegram : @vlmoon99"},
 		},
 		Description: "A comprehensive toolchain for scaffolding, building, testing, and deploying NEAR smart contracts written in Go. It utilizes TinyGo for WASM compilation and an annotation-based code generator for boilerplate reduction.",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Enable verbose/debug output",
+			},
+		},
+		Before: func(c *cli.Context) error {
+			Verbose = c.Bool("verbose")
+			return nil
+		},
 		Commands: []cli.Command{
 			{
 				Name:  "create",

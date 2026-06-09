@@ -25,12 +25,12 @@ func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 		return fmt.Errorf("failed to get absolute path of output: %w", err)
 	}
 
-	fmt.Printf("DEBUG: HandleBuild context\n  Source: %s\n  Output: %s\n", absSourceDir, absOutputName)
+	DebugLog("HandleBuild context\n  Source: %s\n  Output: %s", absSourceDir, absOutputName)
 
 	fmt.Printf("🔍 Scanning project in: %s\n", absSourceDir)
 	generatedCode, err := GenerateCode(absSourceDir)
 	if err != nil {
-		fmt.Printf("DEBUG: GenerateCode returned error: %v\n", err)
+		DebugLog("GenerateCode returned error: %v", err)
 		return fmt.Errorf("code generation failed: %w", err)
 	}
 
@@ -62,8 +62,8 @@ func HandleBuild(sourceDir, outputName string, keepGenerated bool) error {
 
 	fmt.Printf("🔨 Compiling to %s...\n", outputName)
 
-	if err := ExecuteWithRetry(GetTinyGoPath(), args, absSourceDir, 2, os.Getenv("DEBUG") != ""); err != nil {
-		fmt.Printf("DEBUG: TinyGo compilation failed: %v\n", err)
+	if err := ExecuteWithRetry(GetTinyGoPath(), args, absSourceDir, 2, Verbose); err != nil {
+		DebugLog("TinyGo compilation failed: %v", err)
 		return err
 	}
 

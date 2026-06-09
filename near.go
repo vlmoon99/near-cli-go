@@ -8,7 +8,7 @@ import (
 )
 
 func runNearCLI(args ...string) error {
-	cmd := exec.Command(filepath.Join(os.TempDir(), "near"), args...)
+	cmd := exec.Command(filepath.Join(getToolHome(), "near"), args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

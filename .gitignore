@@ -1,1 +1,22 @@
+# Embedded tool binaries
 /bindata/tools/
+
+# Build artifacts
+*.wasm
+*.zip
+near-cli-*
+generated_build.go
+
+# Development artifacts
+go_context.txt
+test1/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

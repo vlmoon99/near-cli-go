@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func HandleCreateProject(projectName, projectType, moduleName string) error {
@@ -12,48 +13,52 @@ func HandleCreateProject(projectName, projectType, moduleName string) error {
 
 	fmt.Printf("🚀 Creating project '%s'...\n", projectName)
 
-	if err := CreateFolderAndNavigate(projectName); err != nil {
-		return err
+	projectDir, err := filepath.Abs(projectName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve project path: %w", err)
 	}
 
-	if err := initializeSmartContract(moduleName); err != nil {
-		os.Chdir("..")
+	contractDir := filepath.Join(projectDir, SmartContractProjectFolder)
+	if err := os.MkdirAll(contractDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create project directory: %w", err)
+	}
+
+	if err := initializeSmartContract(contractDir, moduleName); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func initializeSmartContract(moduleName string) error {
-	if err := CreateFolderAndNavigate(SmartContractProjectFolder); err != nil {
-		return err
-	}
-
+func initializeSmartContract(contractDir, moduleName string) error {
 	fmt.Println("📝 Creating template...")
 	content, err := templates.ReadFile(ContractMainGoPath)
 	if err != nil {
 		return fmt.Errorf("%s %v", ErrToReadFile, err)
 	}
 
-	if err := WriteToFile(ContractMainGoFileName, string(content)); err != nil {
+	mainGoPath := filepath.Join(contractDir, "main.go")
+	if err := WriteToFile(mainGoPath, string(content)); err != nil {
 		return err
 	}
 
 	fmt.Println("📦 Initializing Go module...")
-	if _, err := ExecuteCommand("go", "mod", "init", moduleName); err != nil {
+	if _, err := ExecuteCommandInDir(contractDir, "go", "mod", "init", moduleName); err != nil {
 		return fmt.Errorf("failed to init go module: %w", err)
 	}
 
-	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+	goModPath := filepath.Join(contractDir, "go.mod")
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
 		return fmt.Errorf("%s", ErrGoProjectModFileIsMissing)
 	}
 
 	fmt.Println("📥 Downloading dependencies...")
-	if _, err := ExecuteCommand("go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
+	if _, err := ExecuteCommandInDir(contractDir, "go", "get", fmt.Sprintf("github.com/vlmoon99/near-sdk-go@%s", NearSdkGoVersion)); err != nil {
 		fmt.Printf("⚠️ Warning: Failed to download dependencies: %v\n", err)
 		fmt.Println("   Please run 'go get ./...' manually inside the contract folder.")
 	} else {
-		if _, err := os.Stat("go.sum"); os.IsNotExist(err) {
+		goSumPath := filepath.Join(contractDir, "go.sum")
+		if _, err := os.Stat(goSumPath); os.IsNotExist(err) {
 			fmt.Println("⚠️ Warning: go.sum was not generated.")
 		}
 	}

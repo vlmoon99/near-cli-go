@@ -140,15 +140,29 @@ func WriteToFile(filename, content string) error {
 }
 
 func CreateFolderAndNavigate(name string) error {
-	if err := os.MkdirAll(name, os.ModePerm); err != nil {
-		return err
-	}
-	return os.Chdir(name)
+	return os.MkdirAll(name, os.ModePerm)
 }
 
 func ExecuteCommand(name string, args ...string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(name, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		errStr := stderr.String()
+		if strings.Contains(errStr, "network is unreachable") || strings.Contains(errStr, "no route to host") {
+			return nil, fmt.Errorf("%s", ErrNetworkUnreachable)
+		}
+		return nil, fmt.Errorf("%s: %v: %s", ErrRunningCmd, err, errStr)
+	}
+	return stdout.Bytes(), nil
+}
+
+func ExecuteCommandInDir(dir string, name string, args ...string) ([]byte, error) {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

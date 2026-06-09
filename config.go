@@ -1,9 +1,22 @@
 package main
 
-import "embed"
+import (
+	"embed"
+	"fmt"
+)
 
 //go:embed template/**/*
 var templates embed.FS
+
+// Verbose controls whether debug messages are printed
+var Verbose bool
+
+// DebugLog prints a message only if Verbose mode is enabled
+func DebugLog(format string, args ...interface{}) {
+	if Verbose {
+		fmt.Printf("[DEBUG] "+format+"\n", args...)
+	}
+}
 
 const (
 	NearSdkGoVersion = "v0.1.1"

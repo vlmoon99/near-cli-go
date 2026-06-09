@@ -341,7 +341,9 @@ func (c *Contract) RegularMethod() {}
 		t.Errorf("Expected error when no @contract annotations are present, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "no methods or state structs") {
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "no struct with @contract:state found") &&
+		!strings.Contains(errMsg, "no methods with @contract annotations found") {
 		t.Errorf("Expected specific error message about missing annotations, got: %v", err)
 	}
 }

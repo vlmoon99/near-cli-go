@@ -57,7 +57,7 @@ type FileContent struct {
 }
 
 func GenerateCode(rootDir string) (string, error) {
-	fmt.Printf("DEBUG: CodeGen scanning directory: %s\n", rootDir)
+	DebugLog("CodeGen scanning directory: %s", rootDir)
 
 	allMethods, stateStructs, fileContents, err := parseAllFilesRecursive(rootDir)
 	if err != nil {
@@ -91,7 +91,7 @@ func GenerateCode(rootDir string) (string, error) {
 		return "", fmt.Errorf("no methods with @contract annotations found")
 	}
 
-	fmt.Printf("DEBUG: Found State Struct '%s' and %d Public Methods\n", stateStructs[0].Name, countPublicMethods(allMethods))
+	DebugLog("Found State Struct '%s' and %d Public Methods", stateStructs[0].Name, countPublicMethods(allMethods))
 
 	return generateCode(allMethods, stateStructs, fileContents), nil
 }
@@ -151,7 +151,7 @@ func parseAllFilesRecursive(rootDir string) ([]*MethodInfo, []*StateInfo, []*Fil
 
 		methods, states, content, err := parseContract(path, relPath)
 		if err != nil {
-			fmt.Printf("DEBUG: Failed to parse %s: %v\n", relPath, err)
+			DebugLog("Failed to parse %s: %v", relPath, err)
 			return nil
 		}
 
