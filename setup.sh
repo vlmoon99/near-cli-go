@@ -11,6 +11,7 @@ NEAR_PLATFORMS=(
   "near-cli-rs-x86_64-apple-darwin.tar.gz darwin_amd64"
   "near-cli-rs-aarch64-unknown-linux-gnu.tar.gz linux_arm64"
   "near-cli-rs-x86_64-unknown-linux-gnu.tar.gz linux_amd64"
+  "near-cli-rs-x86_64-pc-windows-msvc.tar.gz windows_amd64"
 )
 NEAR_BASE_URL="https://github.com/near/near-cli-rs/releases/download/${NEAR_VERSION}"
 
@@ -19,6 +20,7 @@ TINYGO_PLATFORMS=(
   "tinygo${TINYGO_VERSION}.darwin-arm64.tar.gz darwin_arm64"
   "tinygo${TINYGO_VERSION}.linux-amd64.tar.gz linux_amd64"
   "tinygo${TINYGO_VERSION}.linux-arm64.tar.gz linux_arm64"
+  "tinygo${TINYGO_VERSION}.windows-amd64.zip windows_amd64"
 )
 TINYGO_BASE_URL="https://github.com/tinygo-org/tinygo/releases/download/v${TINYGO_VERSION}"
 
@@ -50,7 +52,7 @@ for entry in "${NEAR_PLATFORMS[@]}"; do
 
   tar -xzf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR"
 
-  NEAR_BIN_PATH=$(find "$TMP_DIR" -type f -name near -perm -u+x | head -n 1)
+  NEAR_BIN_PATH=$(find "$TMP_DIR" -type f \( -name "near" -o -name "near.exe" \) | head -n 1)
 
   if [ -z "$NEAR_BIN_PATH" ]; then
     echo "     ❌ 'near' binary not found in archive."
@@ -81,7 +83,11 @@ for entry in "${TINYGO_PLATFORMS[@]}"; do
   
   wget -q --show-progress -O "$TMP_DIR/$ARCHIVE" "$URL"
 
-  tar -xzf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR"
+  if [[ "$ARCHIVE" == *.zip ]]; then
+    unzip -q "$TMP_DIR/$ARCHIVE" -d "$TMP_DIR"
+  else
+    tar -xzf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR"
+  fi
 
   if [ ! -d "$TMP_DIR/tinygo" ]; then
     echo "     ❌ 'tinygo' folder not found after extraction."
