@@ -8,10 +8,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/vlmoon99/near-cli-go/bindata"
 )
+
+func getExeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
 
 // Constants for paths
 const (
@@ -35,7 +43,7 @@ func InitEmbeddedBins() {
 		panic("failed to create tool home directory: " + err.Error())
 	}
 
-	nearCliPath := filepath.Join(toolHome, "near")
+	nearCliPath := filepath.Join(toolHome, getExeName("near"))
 	if _, err := os.Stat(nearCliPath); err != nil {
 		if err := os.WriteFile(nearCliPath, bindata.NearCli, 0755); err != nil {
 			panic("failed to write near-cli: " + err.Error())
@@ -44,7 +52,7 @@ func InitEmbeddedBins() {
 
 	tinyGoDir := filepath.Join(toolHome, "tinygo")
 	tinyGoBinDir := filepath.Join(tinyGoDir, "bin")
-	tinyGoMainBin := filepath.Join(tinyGoBinDir, "tinygo")
+	tinyGoMainBin := filepath.Join(tinyGoBinDir, getExeName("tinygo"))
 
 	if _, err := os.Stat(tinyGoMainBin); err == nil {
 		return
@@ -87,7 +95,7 @@ func CheckDependencies() {
 }
 
 func GetTinyGoPath() string {
-	return filepath.Join(getToolHome(), "tinygo", "bin", "tinygo")
+	return filepath.Join(getToolHome(), "tinygo", "bin", getExeName("tinygo"))
 }
 
 func Unzip(src []byte, dest string) error {
