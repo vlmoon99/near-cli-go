@@ -18,9 +18,9 @@ func runNearCLI(args ...string) error {
 	return nil
 }
 
-func HandleDeployContract(id, network string) error {
+func HandleDeployContract(id, network, file string) error {
 	args := []string{
-		"contract", "deploy", id, "use-file", "./main.wasm",
+		"contract", "deploy", id, "use-file", file,
 		"without-init-call", "network-config", network,
 		"sign-with-legacy-keychain", "send",
 	}
@@ -45,7 +45,7 @@ func HandleCallFunction(signer, contract, method, args, gas, deposit, network st
 		"contract", "call-function", "as-transaction", contract, method,
 		"json-args", args, "prepaid-gas", gas, "attached-deposit", deposit,
 		"sign-as", signer, "network-config", network,
-		"sign-with-keychain", "send",
+		"sign-with-legacy-keychain", "send",
 	}
 	fmt.Printf("📞 Calling %s on %s...\n", method, contract)
 	return runNearCLI(cmd...)

@@ -145,7 +145,7 @@ func main() {
 					if id == "" || net == "" {
 						return errors.New(ErrProvidedNetworkAndContractId)
 					}
-					return HandleDeployContract(id, net)
+					return HandleDeployContract(id, net, c.String("file"))
 				},
 			},
 			{
